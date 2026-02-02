@@ -372,7 +372,7 @@ app.post('/api/workflow/generate', async (req, res) => {
   const proof = allProofs.find(p => p.id === proofId)
   if (!proof) return res.status(404).json({ error: 'Proof type not found' })
 
-  const secretName = proof.site.replace('.', '_').toUpperCase() + '_SESSION'
+  const secretName = proof.site.replace(/\./g, '_').toUpperCase() + '_SESSION'
 
   try {
     const msg = await anthropic.messages.create({
