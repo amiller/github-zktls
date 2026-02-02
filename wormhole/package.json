@@ -2,7 +2,7 @@
   "name": "wormhole",
   "type": "module",
   "dependencies": {
-    "wrtc": "^0.4.7",
-    "puppeteer": "^22.0.0"
+    "node-datachannel": "^0.12.0",
+    "puppeteer": "^24.0.0"
   }
 }
