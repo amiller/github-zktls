@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prove Anything</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 0 auto; padding: 2rem; background: #0d1117; color: #c9d1d9; }
+    h1 { color: #58a6ff; margin-bottom: 0.5rem; }
+    .subtitle { color: #8b949e; margin-bottom: 2rem; }
+    .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 1.5rem; margin: 1rem 0; }
+    .card h2 { margin-top: 0; color: #f0f6fc; }
+    input, textarea, button { padding: 0.75rem 1rem; border-radius: 6px; border: 1px solid #30363d; background: #0d1117; color: #c9d1d9; font-size: 1rem; }
+    button { background: #238636; border-color: #238636; cursor: pointer; }
+    button:hover { background: #2ea043; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.secondary { background: #21262d; border-color: #30363d; }
+    .proof-option { display: flex; align-items: center; gap: 1rem; padding: 1rem; background: #21262d; border-radius: 8px; margin: 0.5rem 0; cursor: pointer; border: 2px solid transparent; transition: all 0.2s; }
+    .proof-option:hover { border-color: #30363d; background: #30363d; }
+    .proof-option.selected { border-color: #238636; }
+    .proof-option .icon { font-size: 2rem; }
+    .proof-option .info { flex: 1; }
+    .proof-option .info h3 { margin: 0 0 0.25rem 0; font-size: 1rem; color: #f0f6fc; }
+    .proof-option .info p { margin: 0; font-size: 0.85rem; color: #8b949e; }
+    .proof-option .site { font-size: 0.75rem; color: #58a6ff; }
+    .status { padding: 1rem; border-radius: 6px; margin: 1rem 0; }
+    .status.success { background: #238636; }
+    .status.error { background: #da3633; }
+    .status.pending { background: #1f6feb; }
+    .hidden { display: none; }
+    .post { border-bottom: 1px solid #30363d; padding: 1rem 0; }
+    .post:last-child { border-bottom: none; }
+    .post-meta { color: #8b949e; font-size: 0.85rem; }
+    .post-meta a { color: #58a6ff; }
+    .proof-badge { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem; background: #6e7681; margin-right: 0.5rem; }
+    .generated-content { background: #0d1117; padding: 1rem; border-radius: 6px; border-left: 3px solid #238636; margin-top: 1rem; white-space: pre-wrap; }
+    .show-more { text-align: center; margin-top: 1rem; }
+    .total-count { color: #8b949e; font-size: 0.85rem; text-align: center; margin-top: 0.5rem; }
+    .section-tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+    .section-tabs button { flex: 1; }
+    .section-tabs button.active { background: #238636; }
+    .instructions { background: #21262d; padding: 1rem; border-radius: 6px; margin: 1rem 0; font-size: 0.9rem; }
+    .instructions code { background: #0d1117; padding: 0.2rem 0.4rem; border-radius: 4px; }
+    img.screenshot { max-width: 100%; border-radius: 8px; margin: 1rem 0; }
+  </style>
+</head>
+<body>
+  <h1>Prove Anything</h1>
+  <p class="subtitle">Pick something to prove about yourself. GitHub Actions captures the evidence.</p>
+
+  <!-- Step 1: Pick a proof -->
+  <div id="pickSection" class="card">
+    <h2>What do you want to prove?</h2>
+    <div id="proofOptions"></div>
+    <div class="show-more">
+      <button class="secondary" onclick="loadMore()">Show more options</button>
+    </div>
+    <div id="totalCount" class="total-count"></div>
+  </div>
+
+  <!-- Step 2: Run the proof -->
+  <div id="runSection" class="card hidden">
+    <h2>Run Your Proof</h2>
+    <div id="selectedProof"></div>
+    <div id="workflowSection">
+      <div id="workflowLoading" class="status pending">Generating workflow...</div>
+      <div id="workflowReady" class="hidden">
+        <div class="instructions">
+          <strong>Steps:</strong>
+          <ol>
+            <li>Extract cookies: <code>python extract-cookies.py <span id="siteDomain"></span></code></li>
+            <li>Add as secret: <code id="secretName"></code></li>
+            <li>Create workflow file below in your repo, then run it</li>
+            <li>Paste the run URL below</li>
+          </ol>
+        </div>
+        <details style="margin:1rem 0;">
+          <summary style="cursor:pointer; color:#58a6ff;">View generated workflow YAML</summary>
+          <pre id="workflowYaml" style="background:#0d1117; padding:1rem; border-radius:6px; overflow-x:auto; font-size:0.8rem; margin-top:0.5rem;"></pre>
+        </details>
+      </div>
+    </div>
+    <input type="text" id="runUrl" placeholder="https://github.com/you/repo/actions/runs/12345" style="width:100%;">
+    <button onclick="verify()" style="width:100%; margin-top:0.5rem;">Verify Proof</button>
+    <button class="secondary" onclick="backToPick()" style="width:100%; margin-top:0.5rem;">← Pick different proof</button>
+    <div id="verifyStatus" class="status hidden"></div>
+  </div>
+
+  <!-- Step 3: Logged in -->
+  <div id="loggedInSection" class="hidden">
+    <div class="card">
+      <h2>Verified!</h2>
+      <div id="proofInfo"></div>
+      <img id="proofScreenshot" class="screenshot hidden">
+      <button class="secondary" onclick="logout()">Log Out</button>
+    </div>
+
+    <div class="card">
+      <h2>Generate Content</h2>
+      <p id="generateHint">Claude will create something based on your verified proof.</p>
+      <input type="text" id="generatePrompt" placeholder="Generate something for me!" style="width:100%;">
+      <button onclick="generate()" style="width:100%; margin-top:0.5rem;">Generate with Claude</button>
+      <div id="generatedContent" class="generated-content hidden"></div>
+    </div>
+
+    <div class="card">
+      <h2>Post to Wall</h2>
+      <textarea id="postMessage" placeholder="Share something..." style="width:100%;"></textarea>
+      <button onclick="post()" style="width:100%; margin-top:0.5rem;">Post as verified identity</button>
+    </div>
+  </div>
+
+  <!-- Public wall -->
+  <div class="card">
+    <h2>Public Wall</h2>
+    <div id="wall"><em>Loading...</em></div>
+  </div>
+
+  <script>
+    let allProofs = []
+    let displayedCount = 0
+    let selectedProof = null
+    let sessionId = null
+
+    async function loadProofs() {
+      const res = await fetch('/api/proofs/random?n=5')
+      const data = await res.json()
+      allProofs = data.proofs
+      displayedCount = 5
+      renderProofs()
+      document.getElementById('totalCount').textContent = `${data.total} proof types available`
+    }
+
+    async function loadMore() {
+      const res = await fetch('/api/proofs/all')
+      const data = await res.json()
+      allProofs = data.catalog.flatMap(site =>
+        site.proofs.map(p => ({ ...p, site: site.site, siteName: site.name, icon: site.icon }))
+      )
+      displayedCount = allProofs.length
+      renderProofs()
+      document.querySelector('.show-more').classList.add('hidden')
+    }
+
+    function renderProofs() {
+      const container = document.getElementById('proofOptions')
+      container.innerHTML = allProofs.slice(0, displayedCount).map((p, i) => `
+        <div class="proof-option ${selectedProof?.id === p.id ? 'selected' : ''}" onclick="selectProof(${i})">
+          <span class="icon">${p.icon}</span>
+          <div class="info">
+            <h3>${p.name}</h3>
+            <p>${p.desc}</p>
+            <span class="site">${p.siteName}</span>
+          </div>
+        </div>
+      `).join('')
+    }
+
+    function selectProof(index) {
+      selectedProof = allProofs[index]
+      renderProofs()
+      showRunSection()
+    }
+
+    async function showRunSection() {
+      document.getElementById('pickSection').classList.add('hidden')
+      document.getElementById('runSection').classList.remove('hidden')
+
+      document.getElementById('selectedProof').innerHTML = `
+        <div class="proof-option selected">
+          <span class="icon">${selectedProof.icon}</span>
+          <div class="info">
+            <h3>${selectedProof.name}</h3>
+            <p>${selectedProof.desc}</p>
+            <span class="site">${selectedProof.siteName}</span>
+          </div>
+        </div>
+      `
+
+      const secretName = selectedProof.site.replace('.', '_').toUpperCase() + '_SESSION'
+      document.getElementById('siteDomain').textContent = selectedProof.site
+      document.getElementById('secretName').textContent = secretName
+
+      // Show loading, hide ready
+      document.getElementById('workflowLoading').classList.remove('hidden')
+      document.getElementById('workflowReady').classList.add('hidden')
+
+      // Generate workflow on-demand
+      try {
+        const res = await fetch('/api/workflow/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ proofId: selectedProof.id })
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error)
+
+        document.getElementById('workflowYaml').textContent = data.workflow
+        document.getElementById('workflowLoading').classList.add('hidden')
+        document.getElementById('workflowReady').classList.remove('hidden')
+      } catch (e) {
+        document.getElementById('workflowLoading').textContent = `Error: ${e.message}`
+        document.getElementById('workflowLoading').className = 'status error'
+      }
+    }
+
+    function backToPick() {
+      document.getElementById('runSection').classList.add('hidden')
+      document.getElementById('pickSection').classList.remove('hidden')
+      document.getElementById('verifyStatus').classList.add('hidden')
+    }
+
+    async function verify() {
+      const runUrl = document.getElementById('runUrl').value.trim()
+      const status = document.getElementById('verifyStatus')
+      status.classList.remove('hidden')
+      status.className = 'status pending'
+      status.textContent = 'Verifying proof...'
+
+      try {
+        const res = await fetch('/api/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ runUrl })
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error)
+
+        sessionId = data.sessionId
+        localStorage.setItem('sessionId', sessionId)
+
+        // Cache this proof
+        await fetch('/api/proofs/cache', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ proofId: selectedProof.id, runUrl })
+        })
+
+        showLoggedIn(data)
+        status.className = 'status success'
+        status.textContent = 'Verified!'
+      } catch (e) {
+        status.className = 'status error'
+        status.textContent = `Error: ${e.message}`
+      }
+    }
+
+    function showLoggedIn(data) {
+      document.getElementById('runSection').classList.add('hidden')
+      document.getElementById('loggedInSection').classList.remove('hidden')
+
+      document.getElementById('proofInfo').innerHTML = `
+        <span class="proof-badge">${data.proof.type}</span>
+        <strong>${data.proof.claim}</strong>
+        <p style="color: #8b949e; margin-top: 0.5rem;">
+          Verified via "${data.run.name}" (commit ${data.run.commit})
+        </p>
+      `
+
+      const screenshot = document.getElementById('proofScreenshot')
+      if (data.hasScreenshot) {
+        screenshot.src = `/api/session/${data.sessionId}/screenshot`
+        screenshot.classList.remove('hidden')
+      } else {
+        screenshot.classList.add('hidden')
+      }
+    }
+
+    function logout() {
+      sessionId = null
+      selectedProof = null
+      localStorage.removeItem('sessionId')
+      document.getElementById('loggedInSection').classList.add('hidden')
+      document.getElementById('pickSection').classList.remove('hidden')
+      document.getElementById('generatedContent').classList.add('hidden')
+      document.getElementById('runUrl').value = ''
+    }
+
+    async function generate() {
+      const prompt = document.getElementById('generatePrompt').value || 'Generate something for me!'
+      const content = document.getElementById('generatedContent')
+      content.classList.remove('hidden')
+      content.textContent = 'Generating...'
+
+      try {
+        const res = await fetch('/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId, prompt })
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error)
+        content.textContent = data.content
+      } catch (e) {
+        content.textContent = `Error: ${e.message}`
+      }
+    }
+
+    async function post() {
+      const message = document.getElementById('postMessage').value.trim()
+      if (!message) return alert('Write something!')
+
+      try {
+        const res = await fetch('/api/wall', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId, message })
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error)
+        document.getElementById('postMessage').value = ''
+        loadWall()
+      } catch (e) {
+        alert(`Error: ${e.message}`)
+      }
+    }
+
+    async function loadWall() {
+      try {
+        const res = await fetch('/api/wall')
+        const data = await res.json()
+        const wall = document.getElementById('wall')
+        if (!data.posts?.length) {
+          wall.innerHTML = '<em>No posts yet. Be the first!</em>'
+          return
+        }
+        wall.innerHTML = data.posts.map(p => `
+          <div class="post">
+            <span class="proof-badge">${p.proofType || 'verified'}</span>
+            <strong>${p.identity}</strong>
+            <p>${escapeHtml(p.message)}</p>
+            <div class="post-meta">
+              ${new Date(p.timestamp).toLocaleString()} ·
+              <a href="${p.runUrl}" target="_blank">view proof</a>
+            </div>
+          </div>
+        `).join('')
+      } catch {
+        document.getElementById('wall').innerHTML = '<em>Error loading</em>'
+      }
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div')
+      div.textContent = text
+      return div.innerHTML
+    }
+
+    // Init
+    loadProofs()
+    loadWall()
+  </script>
+</body>
+</html>

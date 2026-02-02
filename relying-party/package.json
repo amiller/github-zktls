@@ -1,0 +1,11 @@
+{
+  "name": "relying-party",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "express": "^4.21.2"
+  }
+}

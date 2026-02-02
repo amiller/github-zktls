@@ -1,0 +1,58 @@
+name: GitHub Contributions Proof
+
+on:
+  workflow_dispatch:
+    inputs:
+      username:
+        description: 'GitHub username to prove'
+        required: true
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start browser container
+        run: |
+          cd browser-container
+          docker compose up -d --build
+          sleep 10
+          curl -f http://localhost:3002/health
+
+      - name: Inject session and capture proof
+        env:
+          SESSION_JSON: ${{ secrets.GITHUB_COM_SESSION }}
+        run: |
+          mkdir -p proof
+
+          echo "$SESSION_JSON" | curl -X POST http://localhost:3002/session \
+            -H "Content-Type: application/json" -d @-
+
+          curl -X POST http://localhost:3002/navigate \
+            -H "Content-Type: application/json" \
+            -d '{"url":"https://github.com/${{ inputs.username }}"}'
+
+          sleep 5
+          curl http://localhost:3002/screenshot -o proof/screenshot.png
+
+          cat > proof/certificate.json << EOF
+          {
+            "type": "github-contributions",
+            "username": "${{ inputs.username }}",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "github_run_id": "${{ github.run_id }}",
+            "github_run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          }
+          EOF
+
+      - name: Upload proof artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: github-proof
+          path: proof/
+          retention-days: 90
+
+      - name: Cleanup
+        if: always()
+        run: cd browser-container && docker compose down
