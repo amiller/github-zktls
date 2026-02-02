@@ -1,0 +1,8 @@
+{
+  "name": "wormhole",
+  "type": "module",
+  "dependencies": {
+    "wrtc": "^0.4.7",
+    "puppeteer": "^22.0.0"
+  }
+}

@@ -1,0 +1,83 @@
+name: Wormhole Proof (WebRTC Tunnel)
+
+on:
+  workflow_dispatch:
+    inputs:
+      gist_id:
+        description: 'Gist ID for WebRTC signaling'
+        required: true
+      profile:
+        description: 'Twitter/X username to prove'
+        required: true
+        default: 'socrates1024'
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    env:
+      GIST_ID: ${{ inputs.gist_id }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install deps
+        run: |
+          cd wormhole
+          npm install
+
+      - name: Start WebRTC tunnel
+        run: |
+          cd wormhole
+          node runner.js &
+          RUNNER_PID=$!
+          echo "RUNNER_PID=$RUNNER_PID" >> $GITHUB_ENV
+
+          # Wait for SOCKS5 proxy to be ready
+          echo "Waiting for SOCKS5 proxy..."
+          for i in {1..60}; do
+            if nc -z 127.0.0.1 1080 2>/dev/null; then
+              echo "SOCKS5 proxy ready!"
+              break
+            fi
+            sleep 2
+          done
+
+          # Verify proxy works
+          echo "Testing tunnel (getting exit IP)..."
+          EXIT_IP=$(curl --socks5 127.0.0.1:1080 -s https://api.ipify.org || echo "failed")
+          echo "Exit IP: $EXIT_IP"
+
+      - name: Capture proof
+        env:
+          SESSION_JSON: ${{ secrets.TWITTER_SESSION }}
+        run: |
+          mkdir -p proof
+          cd wormhole
+          node capture.js ${{ inputs.profile }}
+
+      - name: Create certificate
+        run: |
+          cat > proof/certificate.json << EOF
+          {
+            "type": "wormhole-twitter-proof",
+            "profile": "${{ inputs.profile }}",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "github_run_id": "${{ github.run_id }}",
+            "signaling_gist": "${{ inputs.gist_id }}",
+            "method": "webrtc-wormhole"
+          }
+          EOF
+
+      - name: Upload proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: wormhole-proof
+          path: proof/
+
+      - name: Cleanup
+        if: always()
+        run: kill $RUNNER_PID 2>/dev/null || true
