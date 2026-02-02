@@ -140,12 +140,12 @@ gh secret set TWITTER_COM_SESSION < cookies.json
 | `paypal-balance.yml` | PayPal account access | `PAYPAL_COM_SESSION` |
 | `github-contributions.yml` | GitHub profile | `GITHUB_COM_SESSION` |
 
-### Relying Party Server
+### Example: Login With Anything
 
 Reference implementation for verifying browser proofs:
 
 ```bash
-cd relying-party && npm install
+cd examples/login-with-anything && npm install
 ANTHROPIC_API_KEY=sk-... node server.js
 # http://localhost:3003
 ```

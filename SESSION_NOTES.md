@@ -1,131 +1,79 @@
 # GitHub zkTLS Development Session Notes
 
 **Date:** 2026-02-01/02
-**Status:** "Prove Anything" relying party server working with on-demand workflow generation
+**Status:** General-purpose GitHub Actions proof system with browser session special case
 
-## Project Goal
+## Project Summary
 
-Build a system for verifiable proofs about authenticated browser sessions using:
-1. **GitHub Actions** as attestation oracle (for verifiable execution)
-2. **Browser automation** for arbitrary website proofs (Twitter followers, eBay seller rating, etc.)
-3. **Relying party server** for "log in with anything" via verified proofs
+GitHub Actions as a "poor man's TEE" for verifiable proofs. Two parties who don't trust each other can both trust GitHub. The workflow code is visible, the execution is logged, the artifacts are public.
 
-Core insight: "GitHub as neutral ground" - two developers who don't trust each other can both trust GitHub. Cookies are the universal API key.
+Core insight: The commit SHA is a merkle root of the entire repo. Fetching the workflow at that SHA gives you exactly what ran. No ceremony needed.
 
-## What Works
+## Active Components
 
-### 1. Relying Party Server ✅ (NEW)
-- **Directory:** `relying-party/`
-- **URL:** http://localhost:3003
-- **Features:**
-  - 57 proof types across 20 popular sites
-  - On-demand workflow generation via Claude
-  - Proof verification from GitHub Actions artifacts
-  - Screenshot display of verified sessions
-  - Public wall for posting as verified identities
-
-### 2. On-Demand Workflow Generation ✅ (NEW)
-- Claude generates site-specific workflows from examples + guidelines
-- Workflows cached after first generation
-- No messy "generic workflow" - each is clean and specific
-- Guidelines doc: `WORKFLOW_GUIDELINES.md`
-
-### 3. eBay Proof ✅ (NEW)
-- **Workflow:** `.github/workflows/ebay-feedback.yml`
-- Successfully verified eBay seller profile (socrates1024, 100% feedback, member since 2004)
-- Test run: https://github.com/amiller/github-zktls/actions/runs/21592011535
-
-### 4. Twitter Proof ✅
-- **Workflow:** `.github/workflows/twitter-proof.yml`
-- Successfully captured screenshot showing authenticated @socrates1024 with 23.9K followers
-- Test run: https://github.com/amiller/github-zktls/actions/runs/21573892596
-
-### 5. GitHub Actions Proof (Anthropic API Key) ✅
-- **Workflow:** `.github/workflows/anthropic-proof.yml`
-- **Verifier:** `verify-proof.sh`
-- Successfully tested: https://github.com/amiller/github-zktls/actions/runs/21573298782
-
-### 6. Cookie Extraction (yt-dlp style) ✅
-- **Script:** `extract-cookies.py`
-- Reads directly from Chrome's SQLite cookie database
-- Decrypts v10 (peanuts key) and v11 (keyring) cookies
-
-### 7. Browser Container (Neko-based) ✅
-- **Directory:** `browser-container/`
-- Captures authenticated screenshots via Bridge API
-- Port 3002 for Bridge API
-
-## Proof Catalog (57 types)
-
-Sites covered: Twitter, Amazon, GitHub, LinkedIn, Reddit, Spotify, Netflix, YouTube, Discord, Twitch, Instagram, TikTok, PayPal, Airbnb, Uber, DoorDash, eBay, Etsy, Stack Overflow, Duolingo
-
-Example proof types per site:
-- **Twitter:** Follower count, verified badge, account age
-- **Amazon:** Cart contents, Prime member, order history
-- **eBay:** Feedback score, watching items
-- **GitHub:** Contributions, stars, repos
-- **Uber:** Rider rating, trip count
-
-## Key Files
-
-| File | Purpose |
-|------|---------|
-| `relying-party/server.js` | Express server - verify proofs, generate workflows, wall API |
-| `relying-party/proofs.js` | Catalog of 57 proof types across 20 sites |
-| `relying-party/public/index.html` | "Prove Anything" UI |
+| Directory | Purpose |
+|-----------|---------|
+| `README.md` | General pattern + agent instructions for provers/verifiers |
+| `browser-container/` | Neko-based container for authenticated browser screenshots |
+| `examples/login-with-anything/` | Reference verifier server with workflow verification |
+| `extract-cookies.py` | Cookie extraction from Chrome/Firefox |
+| `.github/workflows/` | Proof workflow examples |
 | `WORKFLOW_GUIDELINES.md` | Pattern for writing proof workflows |
-| `.github/workflows/twitter-proof.yml` | Example: Twitter proof |
-| `.github/workflows/ebay-feedback.yml` | Example: eBay proof |
-| `.github/workflows/github-contributions.yml` | Example: GitHub proof |
-| `extract-cookies.py` | Cookie extraction from Chrome |
-| `browser-container/` | Neko container for browser automation |
+| `refs/` | Reference materials (yt-dlp cookie code) |
 
-## API Endpoints
+## Proof Workflows
 
+| Workflow | Proves | Secret |
+|----------|--------|--------|
+| `twitter-proof.yml` | Twitter profile + followers | `TWITTER_COM_SESSION` |
+| `ebay-feedback.yml` | eBay seller feedback | `EBAY_COM_SESSION` |
+| `paypal-balance.yml` | PayPal account access | `PAYPAL_COM_SESSION` |
+| `github-contributions.yml` | GitHub profile | `GITHUB_COM_SESSION` |
+| `anthropic-proof.yml` | API key validity | `ANTHROPIC_API_KEY` |
+
+## Relying Party Server
+
+**URL:** http://localhost:3003
+
+Features:
+- Workflow verification against canonical (fetches workflow @ commit SHA, diffs)
+- 57 proof types across 20 sites (on-demand workflow generation)
+- Proof screenshot display
+- Public wall for posting as verified identities
+
+Key endpoints:
 ```
-GET  /api/proofs/random?n=5  - Get random proof options
-GET  /api/proofs/all         - Get full catalog
-POST /api/workflow/generate  - Generate workflow for proof type (Claude)
-GET  /api/workflow/:proofId  - Get cached workflow
-POST /api/verify             - Verify a GitHub Actions proof
-GET  /api/session/:id        - Get session info
-GET  /api/session/:id/screenshot - Get proof screenshot
-GET  /api/wall               - Get wall posts
-POST /api/wall               - Post to wall (requires session)
-```
-
-## GitHub Secrets
-- `ANTHROPIC_API_KEY` - For API key proof workflow
-- `TWITTER_COM_SESSION` - Twitter session cookies JSON
-- `EBAY_COM_SESSION` - eBay session cookies JSON
-
-## Running the Server
-
-```bash
-cd relying-party
-npm install
-ANTHROPIC_API_KEY=sk-... node server.js
-# Server at http://localhost:3003
+POST /api/verify              - Verify run URL, returns workflow verification status
+GET  /api/session/:id/workflow - Inspect actual workflow that ran
+GET  /api/session/:id/screenshot - View proof screenshot
+POST /api/workflow/generate   - Generate workflow for proof type (Claude)
 ```
 
-## Adding a New Proof Type
+## Verification Model
 
-1. Extract cookies: `python extract-cookies.py chrome site.com`
-2. Add as GitHub secret: `gh secret set SITE_COM_SESSION < cookies.json`
-3. Generate workflow via UI or API (Claude creates it)
-4. Copy workflow to `.github/workflows/`
-5. Run workflow and verify
+The relying party fetches:
+1. Run metadata via `gh api /repos/{owner}/{repo}/actions/runs/{run_id}` → gets `head_sha`, `path`
+2. Workflow content at that commit via `gh api /repos/{owner}/{repo}/contents/{path}?ref={head_sha}`
+3. Compares to canonical workflow → returns `workflow.verified: true/false`
 
-## Deprioritized: WebRTC Tunnel
+No "cryptographic attestation" ceremony—we're trusting GitHub's API over TLS either way.
 
-WebRTC tunnel to GitHub Actions was deprioritized. Both sides get relay candidates but timing issues with log-based signaling prevented connection. The proof system works fine via secrets - the IP proxy was for robustness against IP blocking, not security.
+## Archived
 
-## Public Wall Posts
+Moved to `archive/`:
+- `extension/` - Browser extension concept (not used)
+- `test-service/` - Early dev test service
+- `verifier-site/` - Superseded by relying-party
+- `wormhole/` - WebRTC tunnel (deprioritized)
+- `ARCHITECTURE.md` - Detailed but partly stale
 
-The wall shows posts from verified identities:
-- `twitter-follower-proof` / socrates1024 - "Test post from verified user"
-- `ebay-feedback` / socrates1024 - "Verified eBay seller - 100% positive feedback, member since 2004"
+## Test Runs
+
+- Twitter: https://github.com/amiller/github-zktls/actions/runs/21573892596
+- eBay: https://github.com/amiller/github-zktls/actions/runs/21592011535
+- PayPal: https://github.com/amiller/github-zktls/actions/runs/21595600188
+- Anthropic API: https://github.com/amiller/github-zktls/actions/runs/21573298782
 
 ---
 
-*Last updated: 2026-02-02 13:55 UTC*
+*Last updated: 2026-02-02*

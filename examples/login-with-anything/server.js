@@ -115,7 +115,7 @@ const CANONICAL_WORKFLOWS = new Map()
 // Load canonical workflows from .github/workflows on startup
 function loadCanonicalWorkflows() {
   try {
-    const workflowDir = '../.github/workflows'
+    const workflowDir = '../../.github/workflows'
     const files = fs.readdirSync(workflowDir).filter(f => f.endsWith('.yml'))
     for (const file of files) {
       const content = fs.readFileSync(`${workflowDir}/${file}`, 'utf8')
