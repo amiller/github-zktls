@@ -1,0 +1,67 @@
+name: Ngrok Tunnel Proof
+
+on:
+  workflow_dispatch:
+    inputs:
+      proxy_host:
+        description: 'ngrok proxy host'
+        required: true
+      proxy_port:
+        description: 'ngrok proxy port'
+        required: true
+      profile:
+        description: 'Twitter/X username to prove'
+        required: true
+        default: 'socrates1024'
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install deps
+        run: cd wormhole && npm install
+
+      - name: Test tunnel
+        run: |
+          echo "Testing tunnel to ${{ inputs.proxy_host }}:${{ inputs.proxy_port }}..."
+          EXIT_IP=$(curl --socks5 ${{ inputs.proxy_host }}:${{ inputs.proxy_port }} -s --max-time 15 https://api.ipify.org || echo "failed")
+          echo "Exit IP: $EXIT_IP"
+          if [ "$EXIT_IP" = "failed" ]; then
+            echo "Tunnel connection failed!"
+            exit 1
+          fi
+
+      - name: Capture proof
+        env:
+          SESSION_JSON: ${{ secrets.TWITTER_SESSION }}
+          PROXY_HOST: ${{ inputs.proxy_host }}
+          PROXY_PORT: ${{ inputs.proxy_port }}
+        run: |
+          mkdir -p proof
+          cd wormhole
+          node capture-ngrok.js ${{ inputs.profile }}
+
+      - name: Create certificate
+        run: |
+          cat > proof/certificate.json << EOF
+          {
+            "type": "ngrok-tunnel-proof",
+            "profile": "${{ inputs.profile }}",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "github_run_id": "${{ github.run_id }}",
+            "method": "ngrok-socks5-tunnel"
+          }
+          EOF
+
+      - name: Upload proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: ngrok-proof
+          path: proof/
