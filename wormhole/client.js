@@ -12,33 +12,14 @@ async function main() {
 
   console.log('🔌 Creating WebRTC peer connection (with TURN relay)...')
 
-  // Free TURN servers from Open Relay Project + FreeTURN
+  // Free TURN servers - node-datachannel uses turn:user:pass@host:port format
   const pc = new PeerConnection('client', {
     iceServers: [
       'stun:stun.l.google.com:19302',
       'stun:openrelay.metered.ca:80',
-      // Open Relay TURN with credentials
-      {
-        urls: 'turn:openrelay.metered.ca:80',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-      },
-      {
-        urls: 'turn:openrelay.metered.ca:443',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-      },
-      {
-        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-      },
-      // FreeTURN backup
-      {
-        urls: 'turn:freestun.net:3478',
-        username: 'free',
-        credential: 'free'
-      }
+      'turn:openrelayproject:openrelayproject@openrelay.metered.ca:80',
+      'turn:openrelayproject:openrelayproject@openrelay.metered.ca:443',
+      'turn:free:free@freestun.net:3478'
     ]
   })
 

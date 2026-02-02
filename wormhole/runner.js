@@ -16,26 +16,9 @@ async function main() {
     iceServers: [
       'stun:stun.l.google.com:19302',
       'stun:openrelay.metered.ca:80',
-      {
-        urls: 'turn:openrelay.metered.ca:80',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-      },
-      {
-        urls: 'turn:openrelay.metered.ca:443',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-      },
-      {
-        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-      },
-      {
-        urls: 'turn:freestun.net:3478',
-        username: 'free',
-        credential: 'free'
-      }
+      'turn:openrelayproject:openrelayproject@openrelay.metered.ca:80',
+      'turn:openrelayproject:openrelayproject@openrelay.metered.ca:443',
+      'turn:free:free@freestun.net:3478'
     ]
   })
   const sockets = new Map()
