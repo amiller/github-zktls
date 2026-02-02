@@ -1,0 +1,54 @@
+name: Ngrok Authtoken Proof
+
+on:
+  workflow_dispatch:
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ngrok
+        run: |
+          curl -s https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz | tar xz
+          chmod +x ngrok
+
+      - name: Configure and start tunnel
+        env:
+          NGROK_AUTHTOKEN: ${{ secrets.NGROK_AUTHTOKEN }}
+        run: |
+          mkdir -p proof
+          ./ngrok config add-authtoken "$NGROK_AUTHTOKEN"
+          ./ngrok http 8080 --log=stdout --log-format=json &
+          sleep 5
+
+          # Capture tunnel info as proof
+          curl -s http://localhost:4040/api/tunnels > proof/tunnel-info.json
+
+          TUNNEL_URL=$(cat proof/tunnel-info.json | jq -r '.tunnels[0].public_url // "failed"')
+          TUNNEL_ID=$(cat proof/tunnel-info.json | jq -r '.tunnels[0].ID // "none"')
+
+          echo "Tunnel URL: $TUNNEL_URL"
+
+          cat > proof/certificate.json << EOF
+          {
+            "proof_type": "ngrok_authtoken",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "tunnel_established": $([ "$TUNNEL_URL" != "failed" ] && echo "true" || echo "false"),
+            "tunnel_url": "$TUNNEL_URL",
+            "tunnel_id": "$TUNNEL_ID",
+            "github_run_id": "${{ github.run_id }}"
+          }
+          EOF
+
+          echo "=== Proof Certificate ==="
+          cat proof/certificate.json
+
+          pkill ngrok || true
+
+      - name: Upload proof artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ngrok-authtoken-proof
+          path: proof/
