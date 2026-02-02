@@ -372,10 +372,100 @@ The verifier's TCB is small and auditable:
 2. `run-proof.js` - the proof generation script
 3. Target site's TLS certificate
 
+## Browser Proof Architecture (Local Development)
+
+For browser-based proofs, we use a containerized Chrome with extension-based control (no CDP/Playwright). This avoids detectable automation signals.
+
+### Components
+
+```
+┌─────────────────────┐          ┌─────────────────────────────────┐
+│   CLIENT BROWSER    │          │   DOCKER CONTAINER (Neko)       │
+│                     │          │                                 │
+│  ┌───────────────┐  │  cookies │  ┌─────────────────────────┐   │
+│  │ Client        │  │  + UA    │  │  Chromium               │   │
+│  │ Extension     │──┼─────────>│  │  + Proof Extension      │   │
+│  │ (extractor)   │  │          │  │  (injector + capture)   │   │
+│  └───────────────┘  │          │  └─────────────────────────┘   │
+│                     │          │             │                   │
+└─────────────────────┘          │             ▼                   │
+                                 │  ┌─────────────────────────┐   │
+                                 │  │  WS Bridge (:3000)      │   │
+                                 │  │  - receives commands    │   │
+                                 │  │  - returns screenshots  │   │
+                                 │  └─────────────────────────┘   │
+                                 │             │                   │
+                                 │             ▼                   │
+                                 │  ┌─────────────────────────┐   │
+                                 │  │  Proof Artifacts        │   │
+                                 │  │  - screenshot.png       │   │
+                                 │  │  - certificate.json     │   │
+                                 │  └─────────────────────────┘   │
+                                 └─────────────────────────────────┘
+```
+
+### Two Extensions
+
+**1. Client Extension (user's browser)**
+- Extracts cookies for target domain via `chrome.cookies.getAll()`
+- Captures user agent string
+- Sends to remote browser via API
+
+**2. Proof Extension (container browser)**
+- Receives cookies + UA from client
+- Injects cookies via `chrome.cookies.set()`
+- Spoofs UA via `declarativeNetRequest` rules
+- Navigates to target URL
+- Captures screenshot + page content
+- Returns proof artifacts
+
+### Why Not Playwright/CDP?
+
+CDP (Chrome DevTools Protocol) leaves detectable signals:
+- `navigator.webdriver = true`
+- DevTools protocol ports open
+- Automation-specific browser flags
+
+Extension-based control runs in Chrome's normal execution context - indistinguishable from human browsing. Important for sites with bot detection.
+
+### Neko Base Image
+
+We use [Neko](https://github.com/m1k1o/neko) as the container base:
+- Pre-built Chromium container with WebRTC streaming
+- Can view the browser at `http://localhost:8080`
+- Extension loaded via `/usr/share/chromium/extensions/`
+- Supervisord manages browser + WS bridge processes
+
+### Local Development Flow
+
+```bash
+# Start the container
+cd browser-container && docker compose up -d
+
+# Client extracts cookies (manual for now)
+# -> JSON: [{name, value, domain, ...}]
+
+# Send to container via API
+curl -X POST http://localhost:3000/inject-cookies \
+  -H 'Content-Type: application/json' \
+  -d '{"cookies": [...], "userAgent": "Mozilla/5.0 ..."}'
+
+# Trigger proof capture
+curl -X POST http://localhost:3000/capture-proof \
+  -H 'Content-Type: application/json' \
+  -d '{"url": "https://twitter.com/settings"}'
+
+# Get proof artifacts
+curl http://localhost:3000/artifacts/latest
+```
+
 ## Future Directions
 
-### Proxy for IP Masking (Phase 3)
-Route GitHub runner traffic through user's IP to avoid detection/blocking.
+### GitHub Actions Integration
+Once local browser proofs work, wrap in a GitHub Action for verifiable execution.
+
+### Proxy for IP Masking
+Route container traffic through user's IP to avoid geolocation/rate-limit issues.
 
 ### Proof Chaining
 Build proofs that reference previous proofs - "I had access yesterday AND today"
@@ -384,7 +474,7 @@ Build proofs that reference previous proofs - "I had access yesterday AND today"
 Proof scripts that extract specific claims without revealing full page content.
 
 ### Upgrade Path to zkTLS
-When stakes justify complexity, the same cookie extraction can feed TLSNotary instead of Playwright.
+When stakes justify complexity, the same cookie extraction can feed TLSNotary instead of extension-based capture.
 
 ---
 
