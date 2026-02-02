@@ -12,7 +12,32 @@ async function main() {
   const offer = JSON.parse(Buffer.from(offerB64, 'base64').toString())
   console.log('📥 Got offer from workflow input')
 
-  const pc = new PeerConnection('runner', { iceServers: ['stun:stun.l.google.com:19302'] })
+  const pc = new PeerConnection('runner', {
+    iceServers: [
+      'stun:stun.l.google.com:19302',
+      'stun:openrelay.metered.ca:80',
+      {
+        urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
+        urls: 'turn:freestun.net:3478',
+        username: 'free',
+        credential: 'free'
+      }
+    ]
+  })
   const sockets = new Map()
   let dc
 

@@ -10,8 +10,37 @@ async function main() {
   const repo = process.argv[2] || 'amiller/github-zktls'
   const profile = process.argv[3] || 'socrates1024'
 
-  console.log('🔌 Creating WebRTC peer connection...')
-  const pc = new PeerConnection('client', { iceServers: ['stun:stun.l.google.com:19302'] })
+  console.log('🔌 Creating WebRTC peer connection (with TURN relay)...')
+
+  // Free TURN servers from Open Relay Project + FreeTURN
+  const pc = new PeerConnection('client', {
+    iceServers: [
+      'stun:stun.l.google.com:19302',
+      'stun:openrelay.metered.ca:80',
+      // Open Relay TURN with credentials
+      {
+        urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      {
+        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      },
+      // FreeTURN backup
+      {
+        urls: 'turn:freestun.net:3478',
+        username: 'free',
+        credential: 'free'
+      }
+    ]
+  })
 
   const connections = new Map()
   const dc = pc.createDataChannel('proxy')
