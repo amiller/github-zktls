@@ -3,8 +3,8 @@ name: Wormhole Proof (WebRTC Tunnel)
 on:
   workflow_dispatch:
     inputs:
-      gist_id:
-        description: 'Gist ID for WebRTC signaling'
+      offer:
+        description: 'Base64-encoded WebRTC offer from client'
         required: true
       profile:
         description: 'Twitter/X username to prove'
@@ -14,8 +14,6 @@ on:
 jobs:
   prove:
     runs-on: ubuntu-latest
-    env:
-      GIST_ID: ${{ inputs.gist_id }}
     steps:
       - uses: actions/checkout@v4
 
@@ -25,19 +23,18 @@ jobs:
           node-version: '20'
 
       - name: Install deps
-        run: |
-          cd wormhole
-          npm install
+        run: cd wormhole && npm install
 
       - name: Start WebRTC tunnel
+        env:
+          OFFER: ${{ inputs.offer }}
         run: |
           cd wormhole
           node runner.js &
           RUNNER_PID=$!
           echo "RUNNER_PID=$RUNNER_PID" >> $GITHUB_ENV
 
-          # Wait for SOCKS5 proxy to be ready
-          echo "Waiting for SOCKS5 proxy..."
+          # Wait for SOCKS5 proxy
           for i in {1..60}; do
             if nc -z 127.0.0.1 1080 2>/dev/null; then
               echo "SOCKS5 proxy ready!"
@@ -46,9 +43,8 @@ jobs:
             sleep 2
           done
 
-          # Verify proxy works
-          echo "Testing tunnel (getting exit IP)..."
-          EXIT_IP=$(curl --socks5 127.0.0.1:1080 -s https://api.ipify.org || echo "failed")
+          # Test tunnel
+          EXIT_IP=$(curl --socks5 127.0.0.1:1080 -s --max-time 10 https://api.ipify.org || echo "tunnel-not-ready")
           echo "Exit IP: $EXIT_IP"
 
       - name: Capture proof
@@ -67,8 +63,7 @@ jobs:
             "profile": "${{ inputs.profile }}",
             "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
             "github_run_id": "${{ github.run_id }}",
-            "signaling_gist": "${{ inputs.gist_id }}",
-            "method": "webrtc-wormhole"
+            "method": "webrtc-tunnel-via-logs"
           }
           EOF
 
