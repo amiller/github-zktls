@@ -44,26 +44,67 @@ BROWSER_PATHS = {
 def pbkdf2_sha1(password, salt, iterations, key_length):
     return hashlib.pbkdf2_hmac('sha1', password, salt, iterations, key_length)
 
-def decrypt_v10_linux(encrypted_value):
-    """Decrypt v10 cookies on Linux (AES-CBC with 'peanuts' key)."""
+def get_keyring_password(browser_name='Chrome'):
+    """Get password from Linux keyring (GNOME keyring or kwallet)."""
+    try:
+        import secretstorage
+        with secretstorage.dbus_init() as conn:
+            collection = secretstorage.get_default_collection(conn)
+            for item in collection.get_all_items():
+                if item.get_label() == f'{browser_name} Safe Storage':
+                    return item.get_secret()
+    except Exception as e:
+        print(f"Warning: Could not access keyring: {e}", file=sys.stderr)
+        print("Install with: pip install secretstorage", file=sys.stderr)
+    return None
+
+def decrypt_aes_cbc(ciphertext, key, hash_prefix=False):
+    """Decrypt AES-CBC with PKCS7 padding."""
     try:
         from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
         from cryptography.hazmat.backends import default_backend
     except ImportError:
-        print("Warning: cryptography not installed, can't decrypt v10 cookies", file=sys.stderr)
-        print("Install with: pip install cryptography", file=sys.stderr)
         return None
 
-    key = pbkdf2_sha1(b'peanuts', b'saltysalt', 1, 16)
     iv = b' ' * 16
-
     cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
     decryptor = cipher.decryptor()
-    decrypted = decryptor.update(encrypted_value) + decryptor.finalize()
+    decrypted = decryptor.update(ciphertext) + decryptor.finalize()
 
     # Remove PKCS7 padding
     padding_len = decrypted[-1]
-    return decrypted[:-padding_len].decode('utf-8')
+    plaintext = decrypted[:-padding_len]
+
+    # Strip 32-byte hash prefix if meta_version >= 24
+    if hash_prefix and len(plaintext) >= 32:
+        plaintext = plaintext[32:]
+
+    try:
+        return plaintext.decode('utf-8')
+    except:
+        return None
+
+# Cache the v11 key
+_v11_key_cache = {}
+
+def decrypt_v10_linux(encrypted_value, hash_prefix=False):
+    """Decrypt v10 cookies on Linux (AES-CBC with 'peanuts' key)."""
+    key = pbkdf2_sha1(b'peanuts', b'saltysalt', 1, 16)
+    return decrypt_aes_cbc(encrypted_value, key, hash_prefix)
+
+def decrypt_v11_linux(encrypted_value, browser_name='Chrome', hash_prefix=False):
+    """Decrypt v11 cookies on Linux (AES-CBC with keyring password)."""
+    if browser_name not in _v11_key_cache:
+        password = get_keyring_password(browser_name)
+        if password:
+            _v11_key_cache[browser_name] = pbkdf2_sha1(password, b'saltysalt', 1, 16)
+        else:
+            _v11_key_cache[browser_name] = None
+
+    key = _v11_key_cache[browser_name]
+    if key is None:
+        return None
+    return decrypt_aes_cbc(encrypted_value, key, hash_prefix)
 
 def extract_cookies(browser, domain_filter=None):
     """Extract cookies from browser's SQLite database."""
@@ -83,6 +124,17 @@ def extract_cookies(browser, domain_filter=None):
         conn = sqlite3.connect(tmp_path)
         conn.text_factory = bytes
         cursor = conn.cursor()
+
+        # Check meta_version for hash prefix handling
+        hash_prefix = False
+        try:
+            cursor.execute('SELECT value FROM meta WHERE key = "version"')
+            meta_row = cursor.fetchone()
+            if meta_row:
+                meta_version = int(meta_row[0])
+                hash_prefix = meta_version >= 24
+        except:
+            pass
 
         # Query cookies
         if domain_filter:
@@ -111,12 +163,14 @@ def extract_cookies(browser, domain_filter=None):
                 value = value.decode() if isinstance(value, bytes) else value
             elif encrypted_value:
                 # Check encryption version
+                browser_name = 'Chrome' if browser == 'chrome' else 'Chromium'
                 if encrypted_value[:3] == b'v10':
-                    value = decrypt_v10_linux(encrypted_value[3:])
+                    value = decrypt_v10_linux(encrypted_value[3:], hash_prefix)
                 elif encrypted_value[:3] == b'v11':
-                    # v11 requires keyring access - skip for now
-                    print(f"Warning: v11 encrypted cookie '{name}' for {host_key} - skipping (needs keyring)", file=sys.stderr)
-                    continue
+                    value = decrypt_v11_linux(encrypted_value[3:], browser_name, hash_prefix)
+                    if value is None:
+                        print(f"Warning: v11 encrypted cookie '{name}' for {host_key} - skipping (needs keyring)", file=sys.stderr)
+                        continue
                 else:
                     print(f"Warning: Unknown encryption for cookie '{name}' - skipping", file=sys.stderr)
                     continue

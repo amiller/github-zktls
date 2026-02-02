@@ -9,8 +9,8 @@ services:
     cap_add:
       - SYS_ADMIN
     ports:
-      - "8080:8080"       # Neko WebRTC UI (view the browser)
-      - "3000:3000"       # Proof bridge API
+      - "8082:8080"       # Neko WebRTC UI (view the browser)
+      - "3002:3000"       # Proof bridge API (internal 3000 -> external 3002)
     environment:
       NEKO_DESKTOP_SCREEN: "1920x1080@30"
       NEKO_WEBRTC_ICELITE: "true"
