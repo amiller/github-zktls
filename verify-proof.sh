@@ -22,7 +22,7 @@ echo "Run ID: $RUN_ID"
 echo ""
 
 echo "=== Run Metadata ==="
-gh run view "$RUN_ID" --repo "$REPO" --json headSha,workflowName,conclusion,createdAt,updatedAt
+gh run view "$RUN_ID" --repo "$REPO" --json headSha,name,conclusion,createdAt,updatedAt
 
 COMMIT=$(gh run view "$RUN_ID" --repo "$REPO" --json headSha -q .headSha)
 CONCLUSION=$(gh run view "$RUN_ID" --repo "$REPO" --json conclusion -q .conclusion)
