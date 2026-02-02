@@ -32,6 +32,15 @@ async function main() {
 
   console.log('🔌 Creating WebRTC peer connection (with TURN relay)...')
   const pc = new PeerConnection('client', { iceServers })
+  const iceCandidates = []
+
+  pc.onLocalCandidate(candidate => {
+    iceCandidates.push(candidate)
+  })
+
+  pc.onGatheringStateChange(state => {
+    console.log(`   ICE gathering: ${state}`)
+  })
 
   const connections = new Map()
   const dc = pc.createDataChannel('proxy')
@@ -67,8 +76,15 @@ async function main() {
     }
   })
 
-  // Wait for ICE gathering
-  await new Promise(r => setTimeout(r, 1500))
+  // Wait for ICE gathering (5s for TURN relay)
+  console.log('⏳ Gathering ICE candidates (5s)...')
+  await new Promise(r => setTimeout(r, 5000))
+
+  console.log(`   Gathered ${iceCandidates.length} candidates`)
+  const types = iceCandidates.map(c => c.match(/typ (\w+)/)?.[1])
+  console.log(`   Types: ${[...new Set(types)].join(', ')}`)
+  if (!types.includes('relay')) console.log('   ⚠️  No relay candidates!')
+
   const offer = pc.localDescription()
 
   // Base64 encode offer for workflow input

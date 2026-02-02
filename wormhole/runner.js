@@ -29,8 +29,19 @@ async function main() {
   console.log('🔌 Fetching Cloudflare TURN credentials...')
   const iceServers = await getCloudflareIceServers()
   console.log(`   Got ${iceServers.length} ICE servers`)
+  console.log('ICE_SERVERS:', JSON.stringify(iceServers.map(s => s.replace(/:[^:]+:[^@]+@/, ':***:***@'))))
 
   const pc = new PeerConnection('runner', { iceServers })
+  const candidates = []
+
+  pc.onLocalCandidate(candidate => {
+    candidates.push(candidate)
+    console.log(`ICE_CANDIDATE: ${candidate}`)
+  })
+
+  pc.onGatheringStateChange(state => {
+    console.log(`ICE_GATHERING_STATE: ${state}`)
+  })
   const sockets = new Map()
   let dc
 
@@ -76,7 +87,13 @@ async function main() {
   }
 
   pc.setRemoteDescription(offer.sdp, offer.type)
-  await new Promise(r => setTimeout(r, 2000))
+
+  // Wait longer for ICE gathering (especially TURN relay)
+  console.log('⏳ Waiting for ICE gathering (5s)...')
+  await new Promise(r => setTimeout(r, 5000))
+
+  console.log(`ICE_CANDIDATES_TOTAL: ${candidates.length}`)
+  console.log('ICE_CANDIDATE_TYPES:', candidates.map(c => c.match(/typ (\w+)/)?.[1]).join(', '))
 
   const answer = pc.localDescription()
   const answerB64 = Buffer.from(JSON.stringify({ sdp: answer.sdp, type: answer.type })).toString('base64')

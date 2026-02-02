@@ -34,8 +34,8 @@ jobs:
           RUNNER_PID=$!
           echo "RUNNER_PID=$RUNNER_PID" >> $GITHUB_ENV
 
-          # Wait for SOCKS5 proxy
-          for i in {1..60}; do
+          # Wait for SOCKS5 proxy (up to 3 min for ICE + connection)
+          for i in {1..90}; do
             if nc -z 127.0.0.1 1080 2>/dev/null; then
               echo "SOCKS5 proxy ready!"
               break
