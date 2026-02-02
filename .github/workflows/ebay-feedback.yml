@@ -1,0 +1,47 @@
+```yaml
+name: eBay Feedback Proof
+
+on:
+  workflow_dispatch:
+    inputs:
+      username:
+        description: 'eBay username'
+        required: true
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start browser container
+        run: |
+          cd browser-container
+          docker compose up -d --build
+          sleep 10
+          curl -f http://localhost:3002/health
+      - name: Inject session and capture proof
+        env:
+          SESSION_JSON: ${{ secrets.EBAY_COM_SESSION }}
+        run: |
+          mkdir -p proof
+          echo "$SESSION_JSON" | curl -X POST http://localhost:3002/session -H "Content-Type: application/json" -d @-
+          curl -X POST http://localhost:3002/navigate -H "Content-Type: application/json" -d '{"url":"https://www.ebay.com/usr/${{ inputs.username }}"}'
+          sleep 5
+          curl http://localhost:3002/screenshot -o proof/screenshot.png
+          cat > proof/certificate.json << EOF
+          {
+            "type": "ebay-feedback",
+            "username": "${{ inputs.username }}",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "github_run_id": "${{ github.run_id }}",
+            "github_run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          }
+          EOF
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ebay-proof
+          path: proof/
+          retention-days: 90
+      - if: always()
+        run: cd browser-container && docker compose down
+```
