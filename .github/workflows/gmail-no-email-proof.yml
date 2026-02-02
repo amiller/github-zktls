@@ -23,7 +23,7 @@ jobs:
 
       - name: Inject session and capture proof
         env:
-          SESSION_JSON: ${{ secrets.GMAIL_SESSION }}
+          SESSION_JSON: ${{ secrets.GOOGLE_COM_SESSION }}
         run: |
           mkdir -p proof
 
