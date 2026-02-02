@@ -1,0 +1,66 @@
+name: Twitter Follower Proof
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: 'Twitter/X username to prove (without @)'
+        required: true
+        default: 'socrates1024'
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start browser container
+        run: |
+          cd browser-container
+          docker compose up -d --build
+          sleep 10  # Wait for container to be ready
+          curl -f http://localhost:3002/health
+
+      - name: Inject session and capture proof
+        env:
+          SESSION_JSON: ${{ secrets.TWITTER_SESSION }}
+        run: |
+          mkdir -p proof
+
+          # Inject session cookies
+          echo "$SESSION_JSON" | curl -X POST http://localhost:3002/session \
+            -H "Content-Type: application/json" -d @-
+
+          # Navigate to profile
+          curl -X POST http://localhost:3002/navigate \
+            -H "Content-Type: application/json" \
+            -d '{"url":"https://x.com/${{ inputs.profile }}"}'
+
+          sleep 5  # Wait for page load
+
+          # Capture screenshot
+          curl http://localhost:3002/screenshot -o proof/screenshot.png
+
+          # Create certificate
+          cat > proof/certificate.json << EOF
+          {
+            "type": "twitter-follower-proof",
+            "profile": "${{ inputs.profile }}",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "github_run_id": "${{ github.run_id }}",
+            "github_run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          }
+          EOF
+
+      - name: Upload proof artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: twitter-proof
+          path: proof/
+          retention-days: 90
+
+      - name: Cleanup
+        if: always()
+        run: |
+          cd browser-container
+          docker compose down
