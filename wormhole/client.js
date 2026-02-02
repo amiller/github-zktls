@@ -64,10 +64,18 @@ async function main() {
 
   // Watch logs for answer
   console.log('⏳ Watching logs for answer...')
-  const answer = await watchForAnswer(repo, runId)
+  const { answer, punchTime } = await watchForAnswer(repo, runId)
   console.log('   Got answer!')
 
   pc.setRemoteDescription(answer.sdp, answer.type)
+
+  // Wait for synchronized hole punch time
+  const waitMs = punchTime - Date.now()
+  if (waitMs > 0) {
+    console.log(`🕐 Hole punch in ${Math.round(waitMs/1000)}s at ${new Date(punchTime).toISOString()}`)
+    await new Promise(r => setTimeout(r, waitMs))
+  }
+  console.log('🔓 Punching now!')
 
   process.on('SIGINT', () => { pc.close(); process.exit(0) })
   await new Promise(() => {})
@@ -79,12 +87,14 @@ async function watchForAnswer(repo, runId) {
   while (Date.now() - start < 180000) {
     try {
       const logs = execSync(`gh run view ${runId} -R ${repo} --log 2>/dev/null || true`, { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 })
-      const match = logs.match(/ANSWER_START(.+?)ANSWER_END/)
+      const match = logs.match(/ANSWER_START(.+?)\|(\d+)ANSWER_END/)
       if (match) {
-        return JSON.parse(Buffer.from(match[1], 'base64').toString())
+        const answer = JSON.parse(Buffer.from(match[1], 'base64').toString())
+        const punchTime = parseInt(match[2])
+        return { answer, punchTime }
       }
     } catch {}
-    await new Promise(r => setTimeout(r, 3000))
+    await new Promise(r => setTimeout(r, 2000))
     process.stdout.write('.')
   }
   throw new Error('Timeout waiting for answer in logs')

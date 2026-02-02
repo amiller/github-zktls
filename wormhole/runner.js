@@ -63,8 +63,17 @@ async function main() {
   const answer = pc.localDescription()
   const answerB64 = Buffer.from(JSON.stringify({ sdp: answer.sdp, type: answer.type })).toString('base64')
 
-  // Print answer with markers for client to find in logs
-  console.log(`ANSWER_START${answerB64}ANSWER_END`)
+  // Calculate next 5-second boundary for synchronized hole punch
+  const now = Date.now()
+  const punchTime = Math.ceil((now + 5000) / 5000) * 5000  // next %5=0 boundary, at least 5s from now
+
+  // Print answer + punch time with markers for client to find in logs
+  console.log(`ANSWER_START${answerB64}|${punchTime}ANSWER_END`)
+  console.log(`🕐 Hole punch scheduled for ${new Date(punchTime).toISOString()}`)
+
+  // Wait until punch time, then both sides should attempt simultaneously
+  await new Promise(r => setTimeout(r, punchTime - Date.now()))
+  console.log('🔓 Punching now!')
 
   console.log('⏳ Waiting for connection...')
   await new Promise(() => {})
