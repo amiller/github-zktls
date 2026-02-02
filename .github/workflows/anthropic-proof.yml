@@ -16,9 +16,7 @@ jobs:
           mkdir -p proof
 
           # Make a minimal API call to prove the key works
-          cat > /tmp/request.json << 'REQEOF'
-          {"model": "claude-sonnet-4-20250514", "max_tokens": 32, "messages": [{"role": "user", "content": "Say only: key verified"}]}
-          REQEOF
+          echo '{"model":"claude-sonnet-4-20250514","max_tokens":32,"messages":[{"role":"user","content":"Say only: key verified"}]}' > /tmp/request.json
 
           RESPONSE=$(curl -s -w "\n%{http_code}" \
             https://api.anthropic.com/v1/messages \
