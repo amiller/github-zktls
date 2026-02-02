@@ -6,22 +6,32 @@ import net from 'net'
 
 const { PeerConnection } = nodeDataChannel
 
+async function getCloudflareIceServers() {
+  const res = await fetch('https://speed.cloudflare.com/turn-creds')
+  const { urls, username, credential } = await res.json()
+  // Convert to node-datachannel format
+  return urls.map(url => {
+    if (url.startsWith('stun:')) return url
+    // turn:user:pass@host format
+    const match = url.match(/(turns?):([^?]+)(\?.*)?/)
+    if (match) {
+      const [, proto, hostPort, params] = match
+      return `${proto}:${username}:${credential}@${hostPort}`
+    }
+    return url
+  })
+}
+
 async function main() {
   const repo = process.argv[2] || 'amiller/github-zktls'
   const profile = process.argv[3] || 'socrates1024'
 
-  console.log('🔌 Creating WebRTC peer connection (with TURN relay)...')
+  console.log('🔌 Fetching Cloudflare TURN credentials...')
+  const iceServers = await getCloudflareIceServers()
+  console.log(`   Got ${iceServers.length} ICE servers`)
 
-  // Free TURN servers - node-datachannel uses turn:user:pass@host:port format
-  const pc = new PeerConnection('client', {
-    iceServers: [
-      'stun:stun.l.google.com:19302',
-      'stun:openrelay.metered.ca:80',
-      'turn:openrelayproject:openrelayproject@openrelay.metered.ca:80',
-      'turn:openrelayproject:openrelayproject@openrelay.metered.ca:443',
-      'turn:free:free@freestun.net:3478'
-    ]
-  })
+  console.log('🔌 Creating WebRTC peer connection (with TURN relay)...')
+  const pc = new PeerConnection('client', { iceServers })
 
   const connections = new Map()
   const dc = pc.createDataChannel('proxy')

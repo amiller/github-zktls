@@ -5,6 +5,20 @@ import net from 'net'
 
 const { PeerConnection } = nodeDataChannel
 
+async function getCloudflareIceServers() {
+  const res = await fetch('https://speed.cloudflare.com/turn-creds')
+  const { urls, username, credential } = await res.json()
+  return urls.map(url => {
+    if (url.startsWith('stun:')) return url
+    const match = url.match(/(turns?):([^?]+)(\?.*)?/)
+    if (match) {
+      const [, proto, hostPort] = match
+      return `${proto}:${username}:${credential}@${hostPort}`
+    }
+    return url
+  })
+}
+
 async function main() {
   const offerB64 = process.env.OFFER
   if (!offerB64) throw new Error('OFFER env required')
@@ -12,15 +26,11 @@ async function main() {
   const offer = JSON.parse(Buffer.from(offerB64, 'base64').toString())
   console.log('📥 Got offer from workflow input')
 
-  const pc = new PeerConnection('runner', {
-    iceServers: [
-      'stun:stun.l.google.com:19302',
-      'stun:openrelay.metered.ca:80',
-      'turn:openrelayproject:openrelayproject@openrelay.metered.ca:80',
-      'turn:openrelayproject:openrelayproject@openrelay.metered.ca:443',
-      'turn:free:free@freestun.net:3478'
-    ]
-  })
+  console.log('🔌 Fetching Cloudflare TURN credentials...')
+  const iceServers = await getCloudflareIceServers()
+  console.log(`   Got ${iceServers.length} ICE servers`)
+
+  const pc = new PeerConnection('runner', { iceServers })
   const sockets = new Map()
   let dc
 
