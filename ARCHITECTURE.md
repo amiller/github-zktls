@@ -380,19 +380,20 @@ For browser-based proofs, we use a containerized Chrome with extension-based con
 
 ```
 ┌─────────────────────┐          ┌─────────────────────────────────┐
-│   CLIENT BROWSER    │          │   DOCKER CONTAINER (Neko)       │
+│   CLIENT MACHINE    │          │   DOCKER CONTAINER (Neko)       │
 │                     │          │                                 │
-│  ┌───────────────┐  │  cookies │  ┌─────────────────────────┐   │
-│  │ Client        │  │  + UA    │  │  Chromium               │   │
-│  │ Extension     │──┼─────────>│  │  + Proof Extension      │   │
-│  │ (extractor)   │  │          │  │  (injector + capture)   │   │
-│  └───────────────┘  │          │  └─────────────────────────┘   │
-│                     │          │             │                   │
-└─────────────────────┘          │             ▼                   │
+│  ./extract-cookies  │  cookies │  ┌─────────────────────────┐   │
+│  (reads Chrome DB)  │  + UA    │  │  Chromium               │   │
+│  No extension needed│─────────>│  │  + Proof Extension      │   │
+│                     │   HTTP   │  │  (injector + capture)   │   │
+│                     │          │  └─────────────────────────┘   │
+└─────────────────────┘          │             │                   │
+                                 │             ▼                   │
                                  │  ┌─────────────────────────┐   │
-                                 │  │  WS Bridge (:3000)      │   │
-                                 │  │  - receives commands    │   │
-                                 │  │  - returns screenshots  │   │
+                                 │  │  Bridge API (:3000)     │   │
+                                 │  │  - /session (cookies)   │   │
+                                 │  │  - /navigate            │   │
+                                 │  │  - /capture             │   │
                                  │  └─────────────────────────┘   │
                                  │             │                   │
                                  │             ▼                   │
@@ -404,17 +405,25 @@ For browser-based proofs, we use a containerized Chrome with extension-based con
                                  └─────────────────────────────────┘
 ```
 
-### Two Extensions
+### Cookie Extraction (yt-dlp style)
 
-**1. Client Extension (user's browser)**
-- Extracts cookies for target domain via `chrome.cookies.getAll()`
-- Captures user agent string
-- Sends to remote browser via API
+No browser extension needed on client. We read directly from Chrome's SQLite database:
 
-**2. Proof Extension (container browser)**
-- Receives cookies + UA from client
+```bash
+# Extract cookies for twitter.com
+./extract-cookies.py chrome twitter.com --include-ua > session.json
+```
+
+This reads `~/.config/google-chrome/Default/Cookies`, decrypts v10 cookies (AES-CBC with 'peanuts' key), and outputs JSON.
+
+Based on yt-dlp's battle-tested cookie extraction (see `refs/yt-dlp/yt_dlp/cookies.py`).
+
+### Proof Extension (container browser)
+
+Single extension in the container that:
+- Receives cookies + UA from bridge API
 - Injects cookies via `chrome.cookies.set()`
-- Spoofs UA via `declarativeNetRequest` rules
+- Spoofs UA via request header modification
 - Navigates to target URL
 - Captures screenshot + page content
 - Returns proof artifacts

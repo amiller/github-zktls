@@ -1,0 +1,28 @@
+services:
+  proof-browser:
+    build:
+      context: .
+      dockerfile: Dockerfile.neko
+    container_name: proof-browser
+    restart: unless-stopped
+    shm_size: 2gb
+    cap_add:
+      - SYS_ADMIN
+    ports:
+      - "8080:8080"       # Neko WebRTC UI (view the browser)
+      - "3000:3000"       # Proof bridge API
+    environment:
+      NEKO_DESKTOP_SCREEN: "1920x1080@30"
+      NEKO_WEBRTC_ICELITE: "true"
+      NEKO_WEBRTC_TCPMUX: "56000"
+      NEKO_NAT1TO1: "127.0.0.1"
+      NEKO_WEBRTC_ICESERVERS_FRONTEND: ""
+      NEKO_WEBRTC_ICESERVERS_BACKEND: ""
+      NEKO_MEMBER_PROVIDER: multiuser
+      NEKO_MEMBER_MULTIUSER_USER_PASSWORD: proof
+      NEKO_MEMBER_MULTIUSER_ADMIN_PASSWORD: proof_admin
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 10s
+      retries: 5
+      timeout: 5s

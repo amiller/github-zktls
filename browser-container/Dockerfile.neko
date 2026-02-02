@@ -1,0 +1,26 @@
+# Proof Browser Container
+# Chromium with proof extension pre-loaded
+
+FROM ghcr.io/m1k1o/neko/chromium:latest
+
+# Install Node.js for bridge
+RUN apt-get update && apt-get install -y nodejs && rm -rf /var/lib/apt/lists/*
+
+# Create extension directory
+RUN mkdir -p /usr/share/chromium/extensions /opt/proof
+
+# Copy proof extension
+COPY proof-extension/ /usr/share/chromium/extensions/proof/
+RUN chown -R neko:neko /usr/share/chromium/extensions
+
+# Copy bridge server
+COPY bridge.js /opt/proof/bridge.js
+COPY bridge.conf /etc/neko/supervisord/bridge.conf
+
+# Copy policies (allow extension)
+COPY policies.json /etc/chromium/policies/managed/policies.json
+
+# Copy chromium config (load extension)
+COPY chromium.conf /etc/neko/supervisord/chromium.conf
+
+CMD ["/usr/bin/supervisord", "-c", "/etc/neko/supervisord.conf"]

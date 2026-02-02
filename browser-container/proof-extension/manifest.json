@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Proof Generator",
+  "version": "0.1.0",
+  "description": "Injects cookies and captures proof screenshots",
+  "permissions": [
+    "tabs",
+    "cookies",
+    "scripting",
+    "storage",
+    "alarms",
+    "declarativeNetRequest",
+    "declarativeNetRequestWithHostAccess"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

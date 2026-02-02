@@ -1,0 +1,15 @@
+{
+  "AutofillAddressEnabled": false,
+  "AutofillCreditCardEnabled": false,
+  "BrowserSignin": 0,
+  "DefaultNotificationsSetting": 2,
+  "DeveloperToolsAvailability": 0,
+  "FullscreenAllowed": true,
+  "SyncDisabled": true,
+  "AutoplayAllowed": true,
+  "BrowserGuestModeEnabled": false,
+  "PasswordManagerEnabled": false,
+  "BookmarkBarEnabled": false,
+  "ExtensionInstallAllowlist": ["*"],
+  "ExtensionInstallBlocklist": []
+}
