@@ -16,14 +16,12 @@ jobs:
           mkdir -p proof
 
           # Make a minimal API call to prove the key works
-          echo '{"model":"claude-sonnet-4-20250514","max_tokens":32,"messages":[{"role":"user","content":"Say only: key verified"}]}' > /tmp/request.json
-
-          RESPONSE=$(curl -s -w "\n%{http_code}" \
+          RESPONSE=$(echo '{"model":"claude-sonnet-4-20250514","max_tokens":32,"messages":[{"role":"user","content":"Say only: key verified"}]}' | curl -s -w "\n%{http_code}" \
             https://api.anthropic.com/v1/messages \
             -H "content-type: application/json" \
             -H "x-api-key: $ANTHROPIC_API_KEY" \
             -H "anthropic-version: 2023-06-01" \
-            -d @/tmp/request.json)
+            -d @-)
 
           # Split response body and status code
           HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
