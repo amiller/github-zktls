@@ -109,6 +109,27 @@ jobs:
         run: cd browser-container && docker compose down`
 }
 
+// Canonical workflows - used to verify "bring your own repo" proofs
+const CANONICAL_WORKFLOWS = new Map()
+
+// Load canonical workflows from .github/workflows on startup
+function loadCanonicalWorkflows() {
+  try {
+    const workflowDir = '../.github/workflows'
+    const files = fs.readdirSync(workflowDir).filter(f => f.endsWith('.yml'))
+    for (const file of files) {
+      const content = fs.readFileSync(`${workflowDir}/${file}`, 'utf8')
+      // Extract proof type from certificate.json "type" field in workflow
+      const typeMatch = content.match(/"type":\s*"([^"]+)"/)
+      if (typeMatch) CANONICAL_WORKFLOWS.set(typeMatch[1], content)
+    }
+    console.log(`Loaded ${CANONICAL_WORKFLOWS.size} canonical workflows`)
+  } catch (e) {
+    console.log('Could not load canonical workflows:', e.message)
+  }
+}
+loadCanonicalWorkflows()
+
 // Verify a GitHub Actions proof and create session
 app.post('/api/verify', async (req, res) => {
   const { runUrl } = req.body
@@ -117,10 +138,23 @@ app.post('/api/verify', async (req, res) => {
 
   const [, owner, repo, runId] = match
   try {
-    // Fetch run metadata via gh CLI
-    const runJson = execSync(`gh run view ${runId} --repo ${owner}/${repo} --json conclusion,name,headSha,createdAt`, { encoding: 'utf8' })
-    const run = JSON.parse(runJson)
-    if (run.conclusion !== 'success') return res.status(400).json({ error: `Run not successful: ${run.conclusion}` })
+    // Fetch run metadata including workflow path and commit SHA
+    const runJson = execSync(`gh api /repos/${owner}/${repo}/actions/runs/${runId}`, { encoding: 'utf8' })
+    const runData = JSON.parse(runJson)
+    if (runData.conclusion !== 'success') return res.status(400).json({ error: `Run not successful: ${runData.conclusion}` })
+
+    const { head_sha, path: workflowPath } = runData
+    const run = { conclusion: runData.conclusion, name: runData.name, headSha: head_sha, createdAt: runData.created_at }
+
+    // Fetch workflow content at exact commit SHA
+    let workflowContent = null, workflowVerified = false, workflowMismatch = null
+    try {
+      const contentJson = execSync(`gh api /repos/${owner}/${repo}/contents/${workflowPath}?ref=${head_sha}`, { encoding: 'utf8' })
+      const contentData = JSON.parse(contentJson)
+      workflowContent = Buffer.from(contentData.content, 'base64').toString('utf8')
+    } catch (e) {
+      console.log('Could not fetch workflow content:', e.message)
+    }
 
     // Download artifacts to temp dir
     const tmpDir = `/tmp/proof-${runId}`
@@ -139,16 +173,39 @@ app.post('/api/verify', async (req, res) => {
       if (screenshotPath) screenshot = fs.readFileSync(screenshotPath).toString('base64')
     } catch {}
 
+    // Verify workflow against canonical if we have one
+    const norm = normalizeCert(cert)
+    if (workflowContent && CANONICAL_WORKFLOWS.has(norm.type)) {
+      const canonical = CANONICAL_WORKFLOWS.get(norm.type)
+      // Normalize whitespace for comparison
+      const normalizeWs = s => s.replace(/\s+/g, ' ').trim()
+      if (normalizeWs(workflowContent) === normalizeWs(canonical)) {
+        workflowVerified = true
+      } else {
+        workflowMismatch = { expected: canonical.slice(0, 200), actual: workflowContent.slice(0, 200) }
+      }
+    }
+
     // Create session
-    const session = { runId, runUrl, run, cert, screenshot, tmpDir, messages: [], createdAt: new Date() }
+    const session = {
+      runId, runUrl, run, cert, screenshot, tmpDir,
+      workflowContent, workflowVerified, workflowPath, headSha: head_sha,
+      messages: [], createdAt: new Date()
+    }
     sessions.set(runId, session)
 
-    const norm = normalizeCert(cert)
     res.json({
       sessionId: runId,
       proof: { type: norm.type, claim: norm.claim, timestamp: cert.timestamp },
       run: { name: run.name, commit: run.headSha.slice(0, 7) },
-      hasScreenshot: !!screenshot
+      hasScreenshot: !!screenshot,
+      workflow: {
+        verified: workflowVerified,
+        path: workflowPath,
+        commitSha: head_sha,
+        fromTrustedRepo: owner === 'amiller' && repo === 'github-zktls',
+        mismatch: workflowMismatch ? 'Workflow differs from canonical' : null
+      }
     })
   } catch (e) {
     res.status(500).json({ error: e.message })
@@ -257,6 +314,19 @@ app.get('/api/session/:id/screenshot', (req, res) => {
   if (!session?.screenshot) return res.status(404).json({ error: 'No screenshot' })
   res.set('Content-Type', 'image/png')
   res.send(Buffer.from(session.screenshot, 'base64'))
+})
+
+// Get session workflow (for inspection/audit)
+app.get('/api/session/:id/workflow', (req, res) => {
+  const session = sessions.get(req.params.id)
+  if (!session) return res.status(404).json({ error: 'Session not found' })
+  res.json({
+    path: session.workflowPath,
+    commitSha: session.headSha,
+    verified: session.workflowVerified,
+    content: session.workflowContent,
+    canonical: CANONICAL_WORKFLOWS.get(normalizeCert(session.cert).type) || null
+  })
 })
 
 // Get random proof options
