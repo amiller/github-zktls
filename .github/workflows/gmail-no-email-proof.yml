@@ -1,0 +1,67 @@
+name: Gmail No Email Proof
+
+on:
+  workflow_dispatch:
+    inputs:
+      from_address:
+        description: 'Email address to prove you have no emails from'
+        required: true
+        default: 'jeevacation@gmail.com'
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start browser container
+        run: |
+          cd browser-container
+          docker compose up -d --build
+          sleep 10
+          curl -f http://localhost:3002/health
+
+      - name: Inject session and capture proof
+        env:
+          SESSION_JSON: ${{ secrets.GMAIL_SESSION }}
+        run: |
+          mkdir -p proof
+
+          # Inject session cookies
+          echo "$SESSION_JSON" | curl -X POST http://localhost:3002/session \
+            -H "Content-Type: application/json" -d @-
+
+          # Navigate to Gmail search for emails from the specified address
+          curl -X POST http://localhost:3002/navigate \
+            -H "Content-Type: application/json" \
+            -d '{"url":"https://mail.google.com/mail/u/0/#search/from:${{ inputs.from_address }}"}'
+
+          sleep 8  # Gmail can be slow to load
+
+          # Capture screenshot
+          curl http://localhost:3002/screenshot -o proof/screenshot.png
+
+          # Create certificate
+          cat > proof/certificate.json << EOF
+          {
+            "type": "gmail-no-email-proof",
+            "from_address": "${{ inputs.from_address }}",
+            "claim": "No emails found from this sender",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "github_run_id": "${{ github.run_id }}",
+            "github_run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          }
+          EOF
+
+      - name: Upload proof artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: gmail-no-email-proof
+          path: proof/
+          retention-days: 90
+
+      - name: Cleanup
+        if: always()
+        run: |
+          cd browser-container
+          docker compose down

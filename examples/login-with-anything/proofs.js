@@ -199,6 +199,16 @@ export const PROOF_CATALOG = [
       { id: 'duolingo-languages', name: 'Languages learned', desc: 'Prove which languages you study', url: 'https://www.duolingo.com/profile/{username}' },
     ]
   },
+  {
+    site: 'mail.google.com',
+    name: 'Gmail',
+    icon: '📧',
+    proofs: [
+      { id: 'gmail-no-email', name: 'No email from sender', desc: 'Prove you have zero emails from an address', url: 'https://mail.google.com/mail/u/0/#search/from:{email}' },
+      { id: 'gmail-inbox-zero', name: 'Inbox zero', desc: 'Prove your inbox is empty', url: 'https://mail.google.com/mail/u/0/#inbox' },
+      { id: 'gmail-label-count', name: 'Label contents', desc: 'Prove emails in a specific label', url: 'https://mail.google.com/mail/u/0/#label/{label}' },
+    ]
+  },
 ]
 
 // Get N random proofs from the catalog
