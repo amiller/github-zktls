@@ -1,0 +1,57 @@
+name: Anthropic API Key Proof
+
+on:
+  workflow_dispatch:
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify API key and capture response
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          mkdir -p proof
+
+          # Make a minimal API call to prove the key works
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            https://api.anthropic.com/v1/messages \
+            -H "content-type: application/json" \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -d '{
+              "model": "claude-sonnet-4-20250514",
+              "max_tokens": 32,
+              "messages": [{"role": "user", "content": "Say only: key verified"}]
+            }')
+
+          # Split response body and status code
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          echo "$BODY" > proof/api-response.json
+
+          # Build proof certificate
+          cat > proof/certificate.json << EOF
+          {
+            "proof_type": "anthropic_api_key",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "http_status": $HTTP_CODE,
+            "api_endpoint": "https://api.anthropic.com/v1/messages",
+            "model_requested": "claude-sonnet-4-20250514",
+            "key_valid": $([ "$HTTP_CODE" = "200" ] && echo "true" || echo "false"),
+            "response_model": $(echo "$BODY" | jq -r '.model // "error"' | jq -R .),
+            "usage": $(echo "$BODY" | jq '.usage // {}')
+          }
+          EOF
+
+          echo "=== Proof Certificate ==="
+          cat proof/certificate.json
+
+      - name: Upload proof artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: anthropic-proof
+          path: proof/

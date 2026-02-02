@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      width: 350px;
+      padding: 15px;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+    }
+    h1 {
+      font-size: 16px;
+      margin: 0 0 10px 0;
+    }
+    .status {
+      padding: 8px;
+      margin: 10px 0;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+    .status.info {
+      background: #e3f2fd;
+      color: #1565c0;
+    }
+    .status.success {
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+    .status.error {
+      background: #ffebee;
+      color: #c62828;
+    }
+    button {
+      width: 100%;
+      padding: 10px;
+      margin: 5px 0;
+      background: #0066ff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button:hover {
+      background: #0052cc;
+    }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    .cookie-list {
+      max-height: 200px;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 10px;
+      margin: 10px 0;
+      font-size: 12px;
+      font-family: monospace;
+    }
+    .cookie-item {
+      margin: 5px 0;
+      padding: 5px;
+      background: #f5f5f5;
+      border-radius: 3px;
+    }
+    label {
+      display: block;
+      margin: 10px 0 5px;
+      font-weight: 500;
+    }
+    input {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+  <h1>🦞 GitHub zkTLS</h1>
+  
+  <div id="status" class="status info">
+    Ready to extract cookies
+  </div>
+  
+  <label for="domain">Target Domain:</label>
+  <input type="text" id="domain" placeholder="e.g., twitter.com, localhost" value="">
+  
+  <button id="extractBtn">Extract Cookies</button>
+  
+  <div id="cookieList" class="cookie-list" style="display: none;"></div>
+  
+  <button id="copyBtn" style="display: none;">Copy to Clipboard</button>
+  <button id="triggerGHBtn" style="display: none;" disabled>Trigger GitHub Action (Coming Soon)</button>
+  
+  <div style="margin-top: 15px; font-size: 11px; color: #666;">
+    <p><strong>How it works:</strong></p>
+    <ol style="margin: 5px 0; padding-left: 20px;">
+      <li>Extract cookies from current domain</li>
+      <li>Copy JSON to clipboard</li>
+      <li>Paste into GitHub Actions workflow</li>
+      <li>Proof generated with cookies</li>
+    </ol>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
