@@ -2,6 +2,12 @@
 node_modules/
 package-lock.json
 
+# Foundry
+contracts/out/
+contracts/cache/
+contracts/lib/
+contracts/broadcast/
+
 # Proof outputs
 proof-output/
 browser-container/proof-output/
@@ -30,6 +36,10 @@ npm-debug.log*
 # Environment
 .env
 .env.local
+
+# Session notes (internal)
+docs/SESSION*.md
+SESSION*.md
 # Keep refs as local symlinks, don't track contents
 refs/*/
 refs/
