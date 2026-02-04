@@ -12,13 +12,19 @@ Two parties who don't trust each other can both trust GitHub. When you run a wor
 
 This is "GitHub as TEE"—a transparent, auditable trusted execution environment.
 
-But attestations are verbose and leak metadata. Enter ZK:
+But what can you prove? Anything the workflow can observe:
 
-4. **Generate a ZK proof** that verifies the Sigstore attestation
-5. **Verify on-chain** with a single contract call
-6. **Claim extraction** proves specific facts without revealing the full certificate
+4. **Inject credentials** as GitHub Secrets (encrypted, never logged)
+5. **Fetch authenticated data** over TLS inside the runner
+6. **Attest the response** — GitHub signs what the API returned
 
-This is "GitHub as ZKP"—prove you ran code on GitHub without exposing what or where.
+This is "GitHub as zkTLS"—prove what an API said without revealing your session.
+
+For on-chain verification, attestations are too verbose. Enter ZK:
+
+7. **Generate a ZK proof** that verifies the Sigstore certificate chain
+8. **Verify on-chain** with a single contract call (~300k gas)
+9. **Extract claims** — repo, commit, artifact hash — without the full certificate
 
 ---
 
@@ -26,20 +32,30 @@ This is "GitHub as ZKP"—prove you ran code on GitHub without exposing what or 
 
 Claim testnet ETH by proving you have a GitHub account.
 
+**How it works:** The workflow outputs a `certificate.json` containing your GitHub username. The contract verifies:
+1. The ZK proof is valid (Sigstore signed this attestation)
+2. `sha256(certificate) == artifactHash` (certificate wasn't tampered)
+3. Your username appears in the certificate
+4. You haven't claimed in the last 24 hours
+
 ```bash
-# 1. Fork this repo, run the identity workflow
+# 1. Fork this repo
+gh repo fork
+
+# 2. Run the identity workflow
 gh workflow run github-identity.yml -f recipient_address=0xYOUR_ADDRESS
 
-# 2. Download the attestation bundle
+# 3. Download the attestation bundle + certificate
 gh run download $(gh run list -L1 --json databaseId -q '.[0].databaseId') -n identity-proof
 
-# 3. Generate ZK proof (Docker only)
+# 4. Generate ZK proof
 docker run --rm -v $(pwd):/work zkproof generate /work/bundle.json /work/proof
 
-# 4. Submit to contract
-cast send 0xcfb53ce24F4B5CfA3c4a70F559F60e84C96bf863 \
-  "claim(bytes,bytes32[],address)" \
-  "$(cat proof/proof.hex)" "$(cat proof/inputs.json)" 0xYOUR_ADDRESS \
+# 5. Submit to contract (note: includes certificate + username)
+cast send 0xDd29de730b99b876f21f3AB5DAfBA6711fF2c6AC \
+  "claim(bytes,bytes32[],bytes,string,address)" \
+  "$(cat proof/proof.hex)" "$(cat proof/inputs.json)" \
+  "$(cat identity-proof/certificate.json)" "YOUR_GITHUB_USERNAME" 0xYOUR_ADDRESS \
   --rpc-url https://sepolia.base.org --private-key $YOUR_KEY
 ```
 
@@ -77,9 +93,41 @@ See [`workflow-templates/`](workflow-templates/) for ready-to-use workflows.
 
 ---
 
-## GitHub as ZKP
+## GitHub as zkTLS
 
-The ZK circuit verifies:
+Traditional zkTLS requires MPC ceremonies or specialized notary servers. GitHub gives you this for free:
+
+| Step | What Happens |
+|------|--------------|
+| **1. Store credentials** | Add session cookies/tokens as GitHub Secrets |
+| **2. Run workflow** | Headless browser fetches authenticated data |
+| **3. TLS terminates in runner** | GitHub's isolated VM sees the plaintext |
+| **4. Output becomes artifact** | Tweet content, API response, account data |
+| **5. Sigstore attests** | Proof that *this workflow* produced *this output* |
+
+The trust model: GitHub sees your session, but only runs the code you committed. Anyone can audit the workflow. The attestation binds the result to the exact code version.
+
+### Example: Prove Tweet Authorship
+
+```yaml
+# .github/workflows/tweet-capture.yml
+- name: Fetch tweet as logged-in user
+  env:
+    TWITTER_SESSION: ${{ secrets.TWITTER_SESSION }}
+  run: |
+    # Browser fetches tweet, verifies you're the author
+    node capture-tweet.js $TWEET_ID > tweet.json
+```
+
+The artifact contains the tweet content + proof you authored it. No one else can see your session cookies.
+
+---
+
+## Gas-Efficient On-Chain Verification
+
+Raw Sigstore attestations are ~4KB of JSON + certificates. Verifying on-chain would cost millions of gas. The ZK circuit compresses this:
+
+The circuit verifies:
 
 1. **Certificate chain** — Sigstore intermediate CA signed the leaf cert (P-384 ECDSA)
 2. **Attestation signature** — Leaf cert signed the DSSE envelope (P-256 ECDSA)
@@ -153,11 +201,12 @@ contract MyApp {
 - ✓ Correct signature verification (P-256 + P-384 ECDSA in-circuit)
 - ✓ Immutable binding: repo × commit × artifact
 
-**What you must verify:**
-- The workflow code does what you expect (fetch at commitSha, audit it)
-- The artifact hash matches your expected computation
+**What contracts can verify:**
+- `sha256(certificate) == artifactHash` — the certificate wasn't tampered with
+- Certificate contents — extract claims like `github_actor` for per-user logic
+- `commitSha` — optionally pin to a specific workflow version
 
-The ZK proof guarantees cryptographic validity. You decide whether to trust the workflow logic.
+**The pattern:** The workflow outputs a structured certificate. The contract verifies the certificate matches the attested artifact hash, then parses it to extract claims. No circuit changes needed for new claim types.
 
 See [docs/trust-model.md](docs/trust-model.md) for details.
 

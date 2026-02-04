@@ -6,11 +6,14 @@ import {GitHubFaucet} from "../examples/GitHubFaucet.sol";
 
 contract ClaimFaucet is Script {
     function run() external {
-        GitHubFaucet faucet = GitHubFaucet(payable(0xcfb53ce24F4B5CfA3c4a70F559F60e84C96bf863));
+        GitHubFaucet faucet = GitHubFaucet(payable(vm.envAddress("FAUCET_ADDRESS")));
 
-        // Read proof and inputs
-        bytes memory proof = vm.readFileBinary("test/proof.bin");
-        bytes memory inputsRaw = vm.readFileBinary("test/inputs.bin");
+        // Read proof, inputs, and certificate
+        bytes memory proof = vm.readFileBinary("proof/proof.bin");
+        bytes memory inputsRaw = vm.readFileBinary("proof/inputs.bin");
+        bytes memory certificate = bytes(vm.readFile("proof/certificate.json"));
+        string memory username = vm.envString("GITHUB_USERNAME");
+        address recipient = vm.envAddress("RECIPIENT_ADDRESS");
 
         // Convert raw bytes to bytes32 array
         uint256 numInputs = inputsRaw.length / 32;
@@ -25,17 +28,16 @@ contract ClaimFaucet is Script {
 
         console.log("Proof length:", proof.length);
         console.log("Public inputs count:", publicInputs.length);
+        console.log("Certificate length:", certificate.length);
+        console.log("Username:", username);
         console.log("Faucet balance:", address(faucet).balance);
         console.log("Claim amount:", faucet.claimAmount());
-
-        address recipient = 0x5A370b73385085091de23E0fD21B54F2724EAD8D;
-        console.log("Recipient before:", recipient.balance);
+        console.log("Recipient:", recipient);
 
         vm.startBroadcast();
-        faucet.claim(proof, publicInputs, payable(recipient));
+        faucet.claim(proof, publicInputs, certificate, username, payable(recipient));
         vm.stopBroadcast();
 
-        console.log("Recipient after:", recipient.balance);
         console.log("Claim successful!");
     }
 }

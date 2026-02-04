@@ -2,24 +2,33 @@
 
 Claim testnet ETH by proving you control a GitHub account.
 
-**Contract:** [`0xcfb53ce24F4B5CfA3c4a70F559F60e84C96bf863`](https://sepolia.basescan.org/address/0xcfb53ce24F4B5CfA3c4a70F559F60e84C96bf863) (Base Sepolia)
+**Contract:** [`0xDd29de730b99b876f21f3AB5DAfBA6711fF2c6AC`](https://sepolia.basescan.org/address/0xDd29de730b99b876f21f3AB5DAfBA6711fF2c6AC) (Base Sepolia)
 
 ## How It Works
 
-1. Run a workflow in your fork → Sigstore attests "this GitHub user ran this code"
-2. Generate a ZK proof → proves the attestation without revealing metadata
-3. Submit proof to contract → contract verifies and sends ETH
+1. Fork the repo and run the identity workflow
+2. The workflow outputs `certificate.json` with your GitHub username
+3. Sigstore attests: "this workflow produced this certificate"
+4. Generate a ZK proof of the attestation
+5. Submit proof + certificate to contract
+6. Contract verifies `sha256(certificate) == artifactHash` and extracts your username
 
-The contract doesn't know which repo you used—only that you have a valid Sigstore attestation from *some* GitHub repo. One claim per repo per day.
+**Why this works:** The artifact hash is bound to the certificate contents. If you modify the certificate, the hash won't match. The contract parses `"github_actor":"<username>"` from the certificate and rate-limits per user.
 
-## Step 1: Run the Workflow
+## Step 1: Fork and Run
 
-Fork any repo containing the `github-identity.yml` workflow, then run it:
+```bash
+gh repo fork
+```
+
+This creates `yourusername/github-zktls`.
+
+## Step 2: Run the Workflow
 
 ```bash
 gh workflow run github-identity.yml \
   -f recipient_address=0xYOUR_ETH_ADDRESS \
-  -f faucet_address=0xcfb53ce24F4B5CfA3c4a70F559F60e84C96bf863
+  -f faucet_address=0xDd29de730b99b876f21f3AB5DAfBA6711fF2c6AC
 ```
 
 Or via GitHub UI: **Actions → GitHub Identity → Run workflow**
@@ -55,10 +64,12 @@ proof/
 ## Step 4: Submit to Contract
 
 ```bash
-cast send 0xcfb53ce24F4B5CfA3c4a70F559F60e84C96bf863 \
-  "claim(bytes,bytes32[],address)" \
+cast send 0xDd29de730b99b876f21f3AB5DAfBA6711fF2c6AC \
+  "claim(bytes,bytes32[],bytes,string,address)" \
   "$(cat proof/proof.hex)" \
   "$(cat proof/inputs.json)" \
+  "$(cat identity-proof/certificate.json)" \
+  "YOUR_GITHUB_USERNAME" \
   0xYOUR_ADDRESS \
   --rpc-url https://sepolia.base.org \
   --private-key $YOUR_KEY
@@ -68,15 +79,26 @@ Done. ETH sent to your address.
 
 ---
 
+## What the Contract Verifies
+
+| Check | How |
+|-------|-----|
+| Valid attestation | ZK proof verifies Sigstore certificate chain |
+| Certificate match | `sha256(certificate) == artifactHash` |
+| Username in cert | `"github_actor":"<username>"` appears in certificate |
+| Sybil resistance | One claim per GitHub username per day |
+
+The contract extracts your GitHub username from the certificate and rate-limits per user—not per repo. You can't claim faster by creating multiple forks.
+
 ## Faucet Rules
 
 | Rule | Value |
 |------|-------|
-| Cooldown | 1 claim per repo per 24 hours |
+| Cooldown | 1 claim per GitHub user per 24 hours |
 | Max claim | 0.001 ETH |
 | Dynamic amount | `min(0.001 ETH, balance/20)` |
 
-The cooldown is **per-repo**, not per-user—you can't claim faster by creating multiple addresses.
+The cooldown is **per-user**, not per-repo. Creating multiple forks doesn't help.
 
 ---
 
@@ -86,10 +108,12 @@ The cooldown is **per-repo**, not per-user—you can't claim faster by creating 
 function claim(
     bytes calldata proof,
     bytes32[] calldata publicInputs,
+    bytes calldata certificate,    // raw certificate.json
+    string calldata username,      // GitHub username
     address payable recipient
 ) external;
 
-function canClaim(bytes32 repoHash) external view returns (bool, uint256 nextClaimTime);
+function canClaim(string calldata username) external view returns (bool, uint256 nextClaimTime);
 function claimAmount() external view returns (uint256);
 ```
 
@@ -119,8 +143,8 @@ The relayer is a **convenience**, not a trust assumption:
 
 - **Proof verification is on-chain.** Invalid proofs are rejected by the contract.
 - **Anyone can relay.** You can submit directly, run your own relayer, or use ours.
-- **Recipient is in the proof.** The relayer can't redirect funds.
-- **Replay protection is on-chain.** The contract tracks claims per repo-hash.
+- **Recipient is in the certificate.** The relayer can't redirect funds.
+- **Replay protection is on-chain.** The contract tracks claims per GitHub username.
 
 The security comes from the contract, not the relayer.
 
@@ -128,11 +152,17 @@ The security comes from the contract, not the relayer.
 
 ## Troubleshooting
 
-**"Already claimed today"**
-Your repo claimed within the last 24 hours. Wait or use a different fork.
+**"CertificateMismatch"**
+The certificate you submitted doesn't match the attested artifact hash. Make sure you're submitting the exact `certificate.json` from your workflow run.
+
+**"UsernameMismatch"**
+The username you provided doesn't appear in the certificate. Check that you're using your exact GitHub username (case-sensitive).
+
+**"AlreadyClaimedToday"**
+Your GitHub username has already claimed in the last 24 hours. Wait and try again tomorrow.
 
 **"Faucet empty"**
-The faucet needs funding. Deposits welcome: `0xcfb53ce24F4B5CfA3c4a70F559F60e84C96bf863`
+The faucet needs funding. Deposits welcome: `0xDd29de730b99b876f21f3AB5DAfBA6711fF2c6AC`
 
 **Proof generation fails**
 - Check you downloaded the correct attestation bundle
