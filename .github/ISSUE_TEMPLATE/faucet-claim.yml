@@ -1,0 +1,44 @@
+name: "[CLAIM] Faucet Request"
+description: Submit a ZK proof to claim testnet ETH
+title: "[CLAIM] Faucet request"
+labels: ["claim"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Faucet Claim
+
+        Paste your proof data below. A GitHub Action will process it and send ETH to your recipient address.
+
+        **How to generate proof data:**
+        1. Fork this repo and run the GitHub Identity workflow
+        2. Download the attestation bundle
+        3. Run `docker run --rm -v $(pwd):/work zkproof generate /work/bundle.json /work/proof`
+        4. Copy the contents below
+
+  - type: textarea
+    id: claim-data
+    attributes:
+      label: Proof Data
+      description: Paste your claim JSON here (from proof output)
+      placeholder: |
+        ```json
+        {
+          "proof": "0x...",
+          "inputs": ["0x...", "0x..."],
+          "recipient": "0x..."
+        }
+        ```
+      render: json
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Confirmation
+      options:
+        - label: I understand this is testnet ETH with no monetary value
+          required: true
+        - label: I generated this proof from my own GitHub account
+          required: true

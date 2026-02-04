@@ -80,15 +80,25 @@ case "$1" in
     # Create hex versions for easy contract calls
     xxd -p -c 99999 target/proof/proof > "$OUTPUT/proof.hex"
 
-    # Format public inputs as bytes32 array
+    # Format public inputs as bytes32 array + claim JSON
+    RECIPIENT="${RECIPIENT:-}"
     node -e "
       const fs = require('fs');
       const raw = fs.readFileSync('target/proof/public_inputs');
+      const proof = '0x' + fs.readFileSync('$OUTPUT/proof.hex', 'utf8').trim();
       const inputs = [];
       for (let i = 0; i < raw.length; i += 32) {
         inputs.push('0x' + raw.slice(i, i + 32).toString('hex'));
       }
       fs.writeFileSync('$OUTPUT/inputs.json', JSON.stringify(inputs, null, 2));
+
+      // Generate claim JSON ready for GitHub issue
+      const claim = {
+        proof,
+        inputs,
+        recipient: process.env.RECIPIENT || '0x_YOUR_ADDRESS_HERE'
+      };
+      fs.writeFileSync('$OUTPUT/claim.json', JSON.stringify(claim, null, 2));
       console.log('Public inputs:', inputs.length, 'elements');
     "
 
@@ -98,6 +108,10 @@ case "$1" in
     echo "    $OUTPUT/inputs.bin   - Raw public inputs"
     echo "    $OUTPUT/proof.hex    - Hex-encoded proof"
     echo "    $OUTPUT/inputs.json  - Public inputs array"
+    echo "    $OUTPUT/claim.json   - Ready for GitHub issue submission"
+    echo ""
+    echo "To claim, open an issue at the repo with title '[CLAIM] Faucet request'"
+    echo "and paste the contents of claim.json in a \`\`\`json code block."
     ;;
 
   verify)

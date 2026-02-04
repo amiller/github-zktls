@@ -1,0 +1,158 @@
+# Faucet Claim Relayer
+#
+# Triggered when someone opens an issue with [CLAIM] in the title.
+# Parses proof data from issue body, submits tx, comments result.
+#
+# REQUIREMENTS:
+#   - RELAYER_PRIVATE_KEY secret: funded wallet for gas
+#   - Faucet contract must be deployed on Base Sepolia
+
+name: Process Faucet Claim
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  process-claim:
+    if: contains(github.event.issue.title, '[CLAIM]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Parse claim data
+        id: parse
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.issue.body || '';
+
+            // Extract JSON from code block
+            const jsonMatch = body.match(/```json\s*([\s\S]*?)\s*```/);
+            if (!jsonMatch) {
+              core.setFailed('No JSON code block found in issue body');
+              return;
+            }
+
+            let claim;
+            try {
+              claim = JSON.parse(jsonMatch[1]);
+            } catch (e) {
+              core.setFailed(`Invalid JSON: ${e.message}`);
+              return;
+            }
+
+            // Validate required fields
+            const required = ['proof', 'inputs', 'recipient'];
+            for (const field of required) {
+              if (!claim[field]) {
+                core.setFailed(`Missing required field: ${field}`);
+                return;
+              }
+            }
+
+            // Validate address format
+            if (!/^0x[a-fA-F0-9]{40}$/.test(claim.recipient)) {
+              core.setFailed('Invalid recipient address format');
+              return;
+            }
+
+            // Validate proof is hex
+            if (!/^0x[a-fA-F0-9]+$/.test(claim.proof)) {
+              core.setFailed('Invalid proof format (must be hex)');
+              return;
+            }
+
+            // Validate inputs is array of bytes32
+            if (!Array.isArray(claim.inputs)) {
+              core.setFailed('inputs must be an array');
+              return;
+            }
+
+            core.setOutput('proof', claim.proof);
+            core.setOutput('inputs', JSON.stringify(claim.inputs));
+            core.setOutput('recipient', claim.recipient);
+            core.setOutput('faucet', claim.faucet || '0xcfb53ce24F4B5CfA3c4a70F559F60e84C96bf863');
+
+            console.log('Parsed claim:');
+            console.log(`  Recipient: ${claim.recipient}`);
+            console.log(`  Faucet: ${claim.faucet || 'default'}`);
+            console.log(`  Proof length: ${claim.proof.length} chars`);
+            console.log(`  Inputs count: ${claim.inputs.length}`);
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Submit claim transaction
+        id: submit
+        env:
+          RELAYER_KEY: ${{ secrets.RELAYER_PRIVATE_KEY }}
+        run: |
+          # Format inputs as Solidity array
+          INPUTS='${{ steps.parse.outputs.inputs }}'
+          # Convert ["0x...", "0x..."] to [0x...,0x...]
+          INPUTS_FORMATTED=$(echo "$INPUTS" | jq -r 'join(",")')
+
+          echo "Submitting claim to faucet..."
+
+          TX_HASH=$(cast send \
+            ${{ steps.parse.outputs.faucet }} \
+            "claim(bytes,bytes32[],address)" \
+            "${{ steps.parse.outputs.proof }}" \
+            "[$INPUTS_FORMATTED]" \
+            "${{ steps.parse.outputs.recipient }}" \
+            --private-key "$RELAYER_KEY" \
+            --rpc-url https://sepolia.base.org \
+            --json | jq -r '.transactionHash')
+
+          echo "tx_hash=$TX_HASH" >> $GITHUB_OUTPUT
+          echo "Transaction submitted: $TX_HASH"
+
+      - name: Comment success
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const txHash = '${{ steps.submit.outputs.tx_hash }}';
+            const recipient = '${{ steps.parse.outputs.recipient }}';
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## ✅ Claim Successful!\n\n` +
+                    `**Recipient:** \`${recipient}\`\n` +
+                    `**Transaction:** [${txHash}](https://sepolia.basescan.org/tx/${txHash})\n\n` +
+                    `Funds should arrive shortly.`
+            });
+
+            await github.rest.issues.update({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'closed',
+              labels: ['claimed']
+            });
+
+      - name: Comment failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## ❌ Claim Failed\n\n` +
+                    `The transaction could not be processed. ` +
+                    `Check the [workflow logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.\n\n` +
+                    `Common issues:\n` +
+                    `- Invalid proof or inputs\n` +
+                    `- Repo already claimed today (24h cooldown)\n` +
+                    `- Faucet is empty`
+            });
+
+            await github.rest.issues.addLabels({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: ['failed']
+            });
