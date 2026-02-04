@@ -125,12 +125,14 @@ Don't have ETH for gas? You can submit via GitHub Issues and we'll relay the tra
 
 1. Open an issue on the main repo
 2. Title: `[CLAIM] Faucet request`
-3. Body: paste `proof/claim.json` in a code block
+3. Body: paste your claim data in a JSON code block
 
 ```json
 {
   "proof": "0x...",
-  "inputs": ["0x...", ...],
+  "inputs": ["0x...", "0x...", ...],
+  "certificate": {"github_actor": "yourusername", ...},
+  "username": "yourusername",
   "recipient": "0xYOUR_ADDRESS"
 }
 ```

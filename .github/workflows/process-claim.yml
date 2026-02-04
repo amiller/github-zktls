@@ -44,7 +44,7 @@ jobs:
             }
 
             // Validate required fields
-            const required = ['proof', 'inputs', 'recipient'];
+            const required = ['proof', 'inputs', 'certificate', 'username', 'recipient'];
             for (const field of required) {
               if (!claim[field]) {
                 core.setFailed(`Missing required field: ${field}`);
@@ -70,16 +70,31 @@ jobs:
               return;
             }
 
+            // Validate username is a string
+            if (typeof claim.username !== 'string' || claim.username.length === 0) {
+              core.setFailed('username must be a non-empty string');
+              return;
+            }
+
+            // Validate certificate is an object or string
+            const certString = typeof claim.certificate === 'string'
+              ? claim.certificate
+              : JSON.stringify(claim.certificate);
+
             core.setOutput('proof', claim.proof);
             core.setOutput('inputs', JSON.stringify(claim.inputs));
+            core.setOutput('certificate', certString);
+            core.setOutput('username', claim.username);
             core.setOutput('recipient', claim.recipient);
-            core.setOutput('faucet', claim.faucet || '0xcfb53ce24F4B5CfA3c4a70F559F60e84C96bf863');
+            core.setOutput('faucet', claim.faucet || '0xDd29de730b99b876f21f3AB5DAfBA6711fF2c6AC');
 
             console.log('Parsed claim:');
+            console.log(`  Username: ${claim.username}`);
             console.log(`  Recipient: ${claim.recipient}`);
             console.log(`  Faucet: ${claim.faucet || 'default'}`);
             console.log(`  Proof length: ${claim.proof.length} chars`);
             console.log(`  Inputs count: ${claim.inputs.length}`);
+            console.log(`  Certificate length: ${certString.length} chars`);
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
@@ -94,13 +109,16 @@ jobs:
           INPUTS_FORMATTED=$(echo "$INPUTS" | jq -r 'join(",")')
 
           echo "Submitting claim to faucet..."
+          echo "Username: ${{ steps.parse.outputs.username }}"
 
           set +e
           OUTPUT=$(cast send \
             ${{ steps.parse.outputs.faucet }} \
-            "claim(bytes,bytes32[],address)" \
+            "claim(bytes,bytes32[],bytes,string,address)" \
             "${{ steps.parse.outputs.proof }}" \
             "[$INPUTS_FORMATTED]" \
+            "${{ steps.parse.outputs.certificate }}" \
+            "${{ steps.parse.outputs.username }}" \
             "${{ steps.parse.outputs.recipient }}" \
             --private-key "$RELAYER_KEY" \
             --rpc-url https://sepolia.base.org \
