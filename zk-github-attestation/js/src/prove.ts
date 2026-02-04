@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from 'fs'
 import { gunzipSync } from 'zlib'
 import { generateCircuitInputs, verifySignature } from './index.js'
 import { Noir } from '@noir-lang/noir_js'
-import { UltraHonkBackend } from '@aztec/bb.js'
+import { UltraHonkBackend, Barretenberg, BackendType } from '@aztec/bb.js'
 
 const bundlePath = '../../docs/examples/sample-attestation-bundle.json'
 const circuitPath = '../circuits/target/zk_github_attestation.json'
@@ -24,7 +24,9 @@ async function main() {
 
   // Initialize Noir and backend
   const noir = new Noir(circuit)
-  const backend = new UltraHonkBackend(circuit.bytecode)
+  console.log('Initializing Barretenberg (WASM)...')
+  const api = await Barretenberg.new({ backend: BackendType.Wasm })
+  const backend = new UltraHonkBackend(circuit.bytecode, api)
 
   // Prepare inputs (remove metadata)
   const circuitInputs: Record<string, any> = {}
