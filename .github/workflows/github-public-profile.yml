@@ -1,0 +1,71 @@
+name: GitHub Public Profile Proof
+
+on:
+  workflow_dispatch:
+    inputs:
+      username:
+        description: 'GitHub username to screenshot'
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+  attestations: write
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start browser container
+        run: |
+          cd browser-container
+          docker compose up -d --build
+          sleep 10
+          curl -f http://localhost:3002/health
+
+      - name: Capture public profile screenshot
+        run: |
+          mkdir -p proof
+          curl -X POST http://localhost:3002/navigate \
+            -H "Content-Type: application/json" \
+            -d '{"url":"https://github.com/${{ inputs.username }}"}'
+          sleep 5
+          curl http://localhost:3002/screenshot -o proof/screenshot.png
+          cat > proof/certificate.json << EOF
+          {
+            "type": "github-public-profile",
+            "username": "${{ inputs.username }}",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "github_run_id": "${{ github.run_id }}",
+            "github_run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          }
+          EOF
+
+      - name: Create proof tarball for attestation
+        run: tar -cvf proof.tar -C proof .
+
+      - name: Upload proof artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: github-public-proof
+          path: proof/
+          retention-days: 90
+
+      - name: Generate Sigstore attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: proof.tar
+
+      - name: Upload attestation bundle for inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: attestation-bundle
+          path: |
+            proof.tar
+          retention-days: 90
+
+      - name: Cleanup
+        if: always()
+        run: cd browser-container && docker compose down
