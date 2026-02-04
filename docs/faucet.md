@@ -1,110 +1,58 @@
-# Testnet Faucet Demo
+# Testnet Faucet
 
-Claim testnet ETH by proving you have a GitHub account. No ETH needed—submit your proof via GitHub Issues and we'll relay it for you.
+Claim testnet ETH by proving you control a GitHub account.
 
 **Contract:** [`0xcfb53ce24F4B5CfA3c4a70F559F60e84C96bf863`](https://sepolia.basescan.org/address/0xcfb53ce24F4B5CfA3c4a70F559F60e84C96bf863) (Base Sepolia)
 
 ## How It Works
 
-```
-You                        GitHub Actions                 This Repo                  Contract
- │                              │                              │                          │
- ├── fork & run workflow ──────>│                              │                          │
- │                              ├── Sigstore attestation       │                          │
- │                              │                              │                          │
- ├── download bundle            │                              │                          │
- ├── docker: generate proof     │                              │                          │
- │                              │                              │                          │
- ├── open [CLAIM] issue ───────────────────────────────────────>│                          │
- │                              │                              ├── relay tx ─────────────>│
- │                              │                              │                  verify proof
- │                              │                              │                  send ETH
- │                              │                              │<─────────────────────────┤
- │<─────────────────────────────────────────── comment result ─┤                          │
-```
+1. Run a workflow in your fork → Sigstore attests "this GitHub user ran this code"
+2. Generate a ZK proof → proves the attestation without revealing metadata
+3. Submit proof to contract → contract verifies and sends ETH
 
-## Step-by-Step
+The contract doesn't know which repo you used—only that you have a valid Sigstore attestation from *some* GitHub repo. One claim per repo per day.
 
-### 1. Fork This Repo
+## Step 1: Run the Workflow
 
-Click "Fork" on GitHub. You need your own copy to run workflows.
-
-### 2. Run the GitHub Identity Workflow
+Fork any repo containing the `github-identity.yml` workflow, then run it:
 
 ```bash
-# Via CLI
 gh workflow run github-identity.yml \
   -f recipient_address=0xYOUR_ETH_ADDRESS \
   -f faucet_address=0xcfb53ce24F4B5CfA3c4a70F559F60e84C96bf863
-
-# Or via GitHub UI:
-# Actions → GitHub Identity → Run workflow → Enter your ETH address
 ```
 
-This creates a Sigstore-attested certificate proving:
-- Your GitHub username (`github.actor`)
-- Which repo ran the workflow
-- The exact commit SHA
+Or via GitHub UI: **Actions → GitHub Identity → Run workflow**
 
-### 3. Download the Attestation Bundle
+This creates a Sigstore attestation proving your GitHub username triggered the workflow.
+
+## Step 2: Download the Attestation
 
 ```bash
-# Find your run ID
+# Find your run
 gh run list --workflow=github-identity.yml
 
 # Download the bundle
 gh run download RUN_ID -n identity-proof
-
-# You should have: bundle.json (or similar)
 ```
 
-### 4. Generate the ZK Proof
+You'll get a `bundle.json` containing the Sigstore attestation.
+
+## Step 3: Generate the Proof
 
 ```bash
-# Using our Docker image (recommended)
-docker run --rm \
-  -v $(pwd):/work \
-  -e RECIPIENT=0xYOUR_ETH_ADDRESS \
-  ghcr.io/amiller/zkproof generate /work/bundle.json /work/proof
-
-# Or build locally
-cd zk-proof && docker build -t zkproof .
-docker run --rm -v $(pwd):/work -e RECIPIENT=0xYOUR_ADDRESS \
-  zkproof generate /work/bundle.json /work/proof
+docker run --rm -v $(pwd):/work zkproof generate /work/bundle.json /work/proof
 ```
 
-**Output:**
+Output:
 ```
 proof/
-├── proof.bin      # Raw proof (10KB)
-├── proof.hex      # Hex-encoded for contracts
-├── inputs.json    # Public inputs array
-└── claim.json     # Ready to paste in issue
+├── proof.hex     # Hex-encoded proof for contract
+├── inputs.json   # Public inputs array
+└── claim.json    # Convenience format (for issue-based claims)
 ```
 
-### 5. Submit Your Claim
-
-**Option A: Via GitHub Issue (no ETH needed)**
-
-1. Open a new issue on this repo
-2. Title: `[CLAIM] Faucet request`
-3. Paste the contents of `proof/claim.json` in a code block:
-
-```json
-{
-  "proof": "0x...",
-  "inputs": ["0x...", ...],
-  "recipient": "0xYOUR_ADDRESS"
-}
-```
-
-A GitHub Action will:
-- Parse your proof
-- Submit the transaction (we pay gas)
-- Comment with the result
-- Close the issue
-
-**Option B: Submit Directly (if you have ETH)**
+## Step 4: Submit to Contract
 
 ```bash
 cast send 0xcfb53ce24F4B5CfA3c4a70F559F60e84C96bf863 \
@@ -116,69 +64,81 @@ cast send 0xcfb53ce24F4B5CfA3c4a70F559F60e84C96bf863 \
   --private-key $YOUR_KEY
 ```
 
+Done. ETH sent to your address.
+
+---
+
 ## Faucet Rules
 
 | Rule | Value |
 |------|-------|
-| **Cooldown** | 1 claim per repo per 24 hours |
-| **Max claim** | 0.001 ETH |
-| **Dynamic amount** | `min(0.001 ETH, balance/20)` |
+| Cooldown | 1 claim per repo per 24 hours |
+| Max claim | 0.001 ETH |
+| Dynamic amount | `min(0.001 ETH, balance/20)` |
 
-The cooldown is per-repo, not per-user. This provides Sybil resistance—you can't claim faster by creating multiple addresses.
+The cooldown is **per-repo**, not per-user—you can't claim faster by creating multiple addresses.
 
-## Troubleshooting
-
-**"Already claimed today"**
-Your repo already claimed within the last 24 hours. Wait or use a different fork.
-
-**"Faucet empty"**
-The faucet needs funding. Try again later or fund it yourself (it accepts ETH deposits).
-
-**Proof generation fails**
-- Ensure you downloaded the correct attestation bundle
-- Check Docker has enough memory (2GB recommended)
-
-**Issue not processed**
-- Title must contain `[CLAIM]`
-- Body must have valid JSON in a code block
-- Check the workflow run logs for errors
-
-## Trust Model
-
-The issue-based relayer is a **convenience**, not a trust assumption. Here's why:
-
-1. **Proof verification is on-chain.** The smart contract verifies the ZK proof. Invalid proofs are rejected regardless of who submits them.
-
-2. **Anyone can relay.** You can submit transactions directly, run your own relayer, or use ours. The prover doesn't need to trust the relayer.
-
-3. **Funds go to your address.** The `recipient` is specified in the proof inputs. The relayer can't redirect funds.
-
-4. **Replay protection is on-chain.** The contract tracks claims per repo-hash. Double-claims are rejected by the contract, not the relayer.
-
-The relayer just pays gas on your behalf. It has no special permissions.
+---
 
 ## Contract Interface
 
 ```solidity
-interface IGitHubFaucet {
-    function claim(
-        bytes calldata proof,
-        bytes32[] calldata publicInputs,
-        address payable recipient
-    ) external;
+function claim(
+    bytes calldata proof,
+    bytes32[] calldata publicInputs,
+    address payable recipient
+) external;
 
-    function canClaim(bytes32 repoHash) external view returns (bool, uint256 nextClaimTime);
-    function claimAmount() external view returns (uint256);
+function canClaim(bytes32 repoHash) external view returns (bool, uint256 nextClaimTime);
+function claimAmount() external view returns (uint256);
+```
+
+---
+
+## Gasless Claims
+
+Don't have ETH for gas? You can submit via GitHub Issues and we'll relay the transaction.
+
+1. Open an issue on the main repo
+2. Title: `[CLAIM] Faucet request`
+3. Body: paste `proof/claim.json` in a code block
+
+```json
+{
+  "proof": "0x...",
+  "inputs": ["0x...", ...],
+  "recipient": "0xYOUR_ADDRESS"
 }
 ```
 
-## Run Your Own Relayer
+A GitHub Action will submit the transaction and comment with the result.
 
-Want to run your own gasless claim flow? The pattern is simple:
+### Why This Is Safe
 
-1. Accept signed proofs (via API, GitHub Issues, Telegram, etc.)
-2. Parse and validate format
-3. Call `claim()` with a funded wallet
-4. Report result to user
+The relayer is a **convenience**, not a trust assumption:
 
-See `.github/workflows/process-claim.yml` for our implementation.
+- **Proof verification is on-chain.** Invalid proofs are rejected by the contract.
+- **Anyone can relay.** You can submit directly, run your own relayer, or use ours.
+- **Recipient is in the proof.** The relayer can't redirect funds.
+- **Replay protection is on-chain.** The contract tracks claims per repo-hash.
+
+The security comes from the contract, not the relayer.
+
+---
+
+## Troubleshooting
+
+**"Already claimed today"**
+Your repo claimed within the last 24 hours. Wait or use a different fork.
+
+**"Faucet empty"**
+The faucet needs funding. Deposits welcome: `0xcfb53ce24F4B5CfA3c4a70F559F60e84C96bf863`
+
+**Proof generation fails**
+- Check you downloaded the correct attestation bundle
+- Ensure Docker has 2GB+ RAM
+
+**Issue not processed**
+- Title must contain `[CLAIM]`
+- Body must have valid JSON in a ` ```json ` code block
+- Check workflow logs for errors

@@ -24,15 +24,26 @@ This is "GitHub as ZKP"—prove you ran code on GitHub without exposing what or 
 
 ## Try It: Testnet Faucet
 
-Claim testnet ETH by proving you have a GitHub account. No gas needed.
-
-**[→ Full walkthrough](docs/faucet.md)**
+Claim testnet ETH by proving you have a GitHub account.
 
 ```bash
-# Fork this repo, then:
+# 1. Fork this repo, run the identity workflow
 gh workflow run github-identity.yml -f recipient_address=0xYOUR_ADDRESS
-# ... download bundle, generate proof, open [CLAIM] issue
+
+# 2. Download the attestation bundle
+gh run download $(gh run list -L1 --json databaseId -q '.[0].databaseId') -n identity-proof
+
+# 3. Generate ZK proof (Docker only)
+docker run --rm -v $(pwd):/work zkproof generate /work/bundle.json /work/proof
+
+# 4. Submit to contract
+cast send 0xcfb53ce24F4B5CfA3c4a70F559F60e84C96bf863 \
+  "claim(bytes,bytes32[],address)" \
+  "$(cat proof/proof.hex)" "$(cat proof/inputs.json)" 0xYOUR_ADDRESS \
+  --rpc-url https://sepolia.base.org --private-key $YOUR_KEY
 ```
+
+No ETH for gas? [Open an issue](docs/faucet.md#gasless-claims) titled `[CLAIM]` with your proof—we'll relay it.
 
 ---
 
