@@ -466,3 +466,23 @@ export function toProverToml(inputs: CircuitInputs): string {
   }
   return lines.join('\n')
 }
+
+// CLI entry point
+import { readFileSync, writeFileSync } from 'fs'
+import { fileURLToPath } from 'url'
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const cmd = process.argv[2]
+  if (cmd === 'witness') {
+    const bundlePath = process.argv[3]
+    if (!bundlePath) {
+      console.error('Usage: node index.js witness <bundle.json>')
+      process.exit(1)
+    }
+    const bundle = JSON.parse(readFileSync(bundlePath, 'utf8'))
+    const inputs = generateCircuitInputs(bundle)
+    const toml = toProverToml(inputs)
+    writeFileSync('../circuits/Prover.toml', toml)
+    console.log('Generated Prover.toml')
+  }
+}

@@ -27,8 +27,8 @@ WORKDIR /prover
 COPY circuits/ ./circuits/
 COPY js/ ./js/
 
-# Install JS dependencies (dist/ is pre-built)
-RUN cd js && npm install
+# Install JS dependencies and build
+RUN cd js && npm install && npx tsc
 RUN cd circuits && nargo compile
 
 # Pre-generate verification key (saves time on each proof)
