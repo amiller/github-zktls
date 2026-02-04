@@ -10,7 +10,16 @@ contracts/broadcast/
 
 # Proof outputs
 proof-output/
-browser-container/proof-output/
+proof/
+claim-test/
+browser-container/proof-[0-9]*/
+browser-container/data/
+zk-proof/circuits/proof.json
+zk-proof/circuits/target/
+
+# Credentials
+browser-container/twitter-session.json
+*-session.json
 
 # Test service sessions
 test-service/sessions.json
