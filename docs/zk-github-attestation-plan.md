@@ -84,13 +84,19 @@ Key zkEmail components to reference:
 - `packages/helpers/` - TypeScript for parsing emails
 - `packages/contracts/` - Solidity verifiers
 
+## TODO
+
+- [ ] Fix browser-container Docker setup to use prebuilt image or cache layers - currently wastes CI time rebuilding on every run
+
 ## Implementation Phases
 
-### Phase 1: Collect Sample Data
-- [ ] Add `actions/attest-build-provenance` to a workflow
-- [ ] Download and inspect the bundle format
-- [ ] Document exact byte layout of certificate extensions
+### Phase 1: Collect Sample Data ✅
+- [x] Add `actions/attest-build-provenance` to a workflow
+- [x] Download and inspect the bundle format
+- [x] Document exact byte layout of certificate extensions
 - [ ] Identify Fulcio root/intermediate public keys
+
+**Sample data:** See `docs/examples/sample-attestation-bundle.json` and `docs/examples/attestation-analysis.md`
 
 ### Phase 2: TypeScript Helpers
 - [ ] Bundle parser (extract DSSE, certs, signatures)
