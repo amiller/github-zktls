@@ -94,18 +94,24 @@ Key zkEmail components to reference:
 - [x] Add `actions/attest-build-provenance` to a workflow
 - [x] Download and inspect the bundle format
 - [x] Document exact byte layout of certificate extensions
-- [ ] Identify Fulcio root/intermediate public keys
+- [x] Identify Fulcio root/intermediate public keys → `docs/fulcio-intermediate-ca.md`
 
 **Sample data:** See `docs/examples/sample-attestation-bundle.json` and `docs/examples/attestation-analysis.md`
 
-### Phase 2: TypeScript Helpers
-- [ ] Bundle parser (extract DSSE, certs, signatures)
-- [ ] Certificate parser (extract OIDC claims)
-- [ ] Witness generator for ZK circuit
+### Phase 2: TypeScript Helpers ✅
+- [x] Bundle parser (extract DSSE, certs, signatures) → `zk-github-attestation/js/`
+- [x] Certificate parser (extract OIDC claims) → basic impl, needs extension parsing
+- [x] Witness generator for ZK circuit → `generateCircuitInputs()`
+- [x] PAE encoding computation
+- [x] Signature verification test (passes)
 
-### Phase 3: ZK Circuit (Noir preferred)
-- [ ] ECDSA P-256 signature verification (use stdlib)
+### Phase 3: ZK Circuit (Noir) 🚧
+- [x] Circuit scaffold → `zk-github-attestation/circuits/`
+- [x] ECDSA P-256 signature verification (use stdlib)
+- [x] Circuit compiles with sha256 v0.1.2
+- [ ] **Debug**: Signature fails in circuit (passes in JS) - likely padding/format issue
 - [ ] X.509 certificate parsing (custom)
+- [ ] P-384 cert chain verification (use zkpassport/noir-ecdsa)
 - [ ] OIDC extension extraction
 - [ ] Public input computation
 

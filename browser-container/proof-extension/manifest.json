@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Proof Generator",
-  "version": "0.1.0",
-  "description": "Injects cookies and captures proof screenshots",
+  "version": "0.2.0",
+  "description": "Injects cookies and captures proof via API interception",
   "permissions": [
     "tabs",
     "cookies",

@@ -1,0 +1,26 @@
+{
+  "cookies": [
+    {
+      "name": "auth_token",
+      "value": "YOUR_AUTH_TOKEN_HERE",
+      "domain": ".x.com",
+      "path": "/",
+      "secure": true,
+      "httpOnly": true
+    },
+    {
+      "name": "ct0",
+      "value": "YOUR_CT0_TOKEN_HERE",
+      "domain": ".x.com",
+      "path": "/",
+      "secure": true
+    },
+    {
+      "name": "twid",
+      "value": "YOUR_TWID_HERE",
+      "domain": ".x.com",
+      "path": "/",
+      "secure": true
+    }
+  ]
+}

@@ -33,3 +33,4 @@ npm-debug.log*
 # Keep refs as local symlinks, don't track contents
 refs/*/
 refs/
+archive/

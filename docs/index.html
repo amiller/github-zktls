@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Create Your Proof</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; max-width: 700px; margin: 0 auto; padding: 20px; background: #0d1117; color: #c9d1d9; }
+    h1 { color: #58a6ff; }
+    h2 { color: #f0f6fc; margin-top: 40px; font-size: 18px; }
+    .step { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; margin: 16px 0; }
+    .step-num { background: #238636; color: #fff; width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 600; margin-right: 10px; }
+    .step h3 { display: inline; font-size: 16px; }
+    .step p { margin: 12px 0 0 38px; color: #8b949e; font-size: 14px; }
+    input[type="text"] { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 10px 14px; color: #c9d1d9; font-size: 15px; width: 100%; margin: 10px 0; }
+    input:focus { outline: none; border-color: #58a6ff; }
+    select { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 10px 14px; color: #c9d1d9; font-size: 15px; width: 100%; margin: 10px 0; }
+    .btn { display: inline-block; background: #238636; color: #fff; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 500; margin: 5px 5px 5px 0; }
+    .btn:hover { background: #2ea043; }
+    .btn-secondary { background: #30363d; }
+    .btn-secondary:hover { background: #484f58; }
+    .links { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; margin-top: 20px; display: none; }
+    .links.show { display: block; }
+    .link-row { margin: 12px 0; }
+    .link-row label { display: block; font-size: 13px; color: #8b949e; margin-bottom: 4px; }
+    .link-row a { color: #58a6ff; word-break: break-all; }
+    .note { background: #161b22; border-left: 3px solid #58a6ff; padding: 12px 16px; margin: 20px 0; font-size: 14px; }
+    .proof-option { padding: 12px; border: 1px solid #30363d; border-radius: 6px; margin: 8px 0; cursor: pointer; }
+    .proof-option:hover { border-color: #58a6ff; }
+    .proof-option.selected { border-color: #238636; background: rgba(35, 134, 54, 0.1); }
+    .proof-option h4 { margin: 0 0 4px 0; font-size: 15px; }
+    .proof-option p { margin: 0; font-size: 13px; color: #8b949e; }
+    .badge { font-size: 11px; background: #238636; color: #fff; padding: 2px 8px; border-radius: 10px; margin-left: 8px; }
+    .badge.needs-secret { background: #9e6a03; }
+  </style>
+</head>
+<body>
+  <h1>Create Your Proof</h1>
+  <p style="color: #8b949e;">Generate verifiable proofs using GitHub Actions. Pick a proof type, fork the repo, and run the workflow.</p>
+
+  <h2>Select Proof Type</h2>
+  <div id="proof-types">
+    <div class="proof-option" data-proof="github-public-profile" data-workflow="github-public-profile.yml" data-needs-secret="false">
+      <h4>GitHub Public Profile <span class="badge">No secrets needed</span></h4>
+      <p>Screenshot any public GitHub profile</p>
+    </div>
+    <div class="proof-option" data-proof="github-contributions" data-workflow="github-contributions.yml" data-needs-secret="true" data-secret-name="GITHUB_COM_SESSION">
+      <h4>GitHub Contributions <span class="badge needs-secret">Requires secret</span></h4>
+      <p>Prove your GitHub contribution graph (requires login)</p>
+    </div>
+    <div class="proof-option" data-proof="twitter-proof" data-workflow="twitter-proof.yml" data-needs-secret="true" data-secret-name="TWITTER_COM_SESSION">
+      <h4>Twitter Profile <span class="badge needs-secret">Requires secret</span></h4>
+      <p>Prove your Twitter/X profile</p>
+    </div>
+  </div>
+
+  <h2>Your GitHub Username</h2>
+  <input type="text" id="username" placeholder="e.g., octocat">
+
+  <div class="links" id="output">
+    <h3 style="margin-top: 0;">Your Personalized Links</h3>
+
+    <div class="step">
+      <span class="step-num">1</span>
+      <h3>Fork the repository</h3>
+      <p>This creates your own copy where you can run workflows.</p>
+      <div class="link-row">
+        <a id="fork-link" href="#" target="_blank" class="btn">Fork Repository</a>
+      </div>
+    </div>
+
+    <div class="step" id="secret-step" style="display: none;">
+      <span class="step-num">2</span>
+      <h3>Add your session secret</h3>
+      <p>Go to your fork's Settings → Secrets → Actions, and add a secret named <code id="secret-name"></code> with your session cookies JSON.</p>
+      <div class="link-row">
+        <a id="secrets-link" href="#" target="_blank" class="btn btn-secondary">Open Secrets Settings</a>
+      </div>
+      <div class="note">
+        <strong>How to get session cookies:</strong> Open DevTools → Application → Cookies, copy the relevant cookies as JSON. See <a href="https://github.com/anthropics/github-zktls#extracting-session-cookies" target="_blank">documentation</a>.
+      </div>
+    </div>
+
+    <div class="step">
+      <span class="step-num" id="run-step-num">2</span>
+      <h3>Run the workflow</h3>
+      <p>Go to Actions, select the workflow, click "Run workflow", and enter the required input.</p>
+      <div class="link-row">
+        <a id="workflow-link" href="#" target="_blank" class="btn">Run Workflow</a>
+      </div>
+    </div>
+
+    <div class="step">
+      <span class="step-num" id="verify-step-num">3</span>
+      <h3>Verify your proof</h3>
+      <p>Once the workflow completes, paste the run URL to verify.</p>
+      <div class="link-row">
+        <a id="verify-link" href="#" target="_blank" class="btn btn-secondary">Open Verifier</a>
+      </div>
+    </div>
+
+    <div class="step">
+      <span class="step-num" id="leaderboard-step-num">4</span>
+      <h3>Submit to leaderboard</h3>
+      <p>Show off your proof on the public leaderboard.</p>
+      <div class="link-row">
+        <a id="leaderboard-link" href="#" target="_blank" class="btn btn-secondary">Submit to Leaderboard</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const REPO_OWNER = 'amiller'
+    const REPO_NAME = 'github-zktls'
+    const VERIFIER_URL = 'https://login-with-anything.vercel.app' // Update when deployed
+
+    let selectedProof = null
+
+    document.querySelectorAll('.proof-option').forEach(el => {
+      el.addEventListener('click', () => {
+        document.querySelectorAll('.proof-option').forEach(e => e.classList.remove('selected'))
+        el.classList.add('selected')
+        selectedProof = {
+          id: el.dataset.proof,
+          workflow: el.dataset.workflow,
+          needsSecret: el.dataset.needsSecret === 'true',
+          secretName: el.dataset.secretName
+        }
+        updateLinks()
+      })
+    })
+
+    document.getElementById('username').addEventListener('input', updateLinks)
+
+    function updateLinks() {
+      const username = document.getElementById('username').value.trim()
+      if (!username || !selectedProof) {
+        document.getElementById('output').classList.remove('show')
+        return
+      }
+
+      document.getElementById('output').classList.add('show')
+
+      document.getElementById('fork-link').href = `https://github.com/${REPO_OWNER}/${REPO_NAME}/fork`
+      document.getElementById('secrets-link').href = `https://github.com/${username}/${REPO_NAME}/settings/secrets/actions/new`
+      document.getElementById('workflow-link').href = `https://github.com/${username}/${REPO_NAME}/actions/workflows/${selectedProof.workflow}`
+      document.getElementById('verify-link').href = VERIFIER_URL
+      document.getElementById('leaderboard-link').href = `https://github.com/${REPO_OWNER}/${REPO_NAME}/actions/workflows/submit-to-leaderboard.yml`
+
+      const secretStep = document.getElementById('secret-step')
+      if (selectedProof.needsSecret) {
+        secretStep.style.display = 'block'
+        document.getElementById('secret-name').textContent = selectedProof.secretName
+        document.getElementById('run-step-num').textContent = '3'
+        document.getElementById('verify-step-num').textContent = '4'
+        document.getElementById('leaderboard-step-num').textContent = '5'
+      } else {
+        secretStep.style.display = 'none'
+        document.getElementById('run-step-num').textContent = '2'
+        document.getElementById('verify-step-num').textContent = '3'
+        document.getElementById('leaderboard-step-num').textContent = '4'
+      }
+    }
+  </script>
+</body>
+</html>

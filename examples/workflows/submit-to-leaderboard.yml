@@ -1,0 +1,110 @@
+name: Submit Proof to Leaderboard
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_url:
+        description: 'GitHub Actions run URL (e.g., https://github.com/user/repo/actions/runs/12345)'
+        required: true
+
+jobs:
+  verify-and-add:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse and verify run URL
+        id: parse
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RUN_URL="${{ inputs.run_url }}"
+
+          # Parse URL
+          if [[ ! "$RUN_URL" =~ github\.com/([^/]+)/([^/]+)/actions/runs/([0-9]+) ]]; then
+            echo "Invalid run URL format"
+            exit 1
+          fi
+          OWNER="${BASH_REMATCH[1]}"
+          REPO="${BASH_REMATCH[2]}"
+          RUN_ID="${BASH_REMATCH[3]}"
+
+          echo "owner=$OWNER" >> $GITHUB_OUTPUT
+          echo "repo=$REPO" >> $GITHUB_OUTPUT
+          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+
+          # Fetch run and verify success
+          RUN_DATA=$(gh api "/repos/$OWNER/$REPO/actions/runs/$RUN_ID")
+          CONCLUSION=$(echo "$RUN_DATA" | jq -r '.conclusion')
+          WORKFLOW_NAME=$(echo "$RUN_DATA" | jq -r '.name')
+          CREATED_AT=$(echo "$RUN_DATA" | jq -r '.created_at')
+          ACTOR=$(echo "$RUN_DATA" | jq -r '.actor.login')
+
+          if [[ "$CONCLUSION" != "success" ]]; then
+            echo "Run not successful: $CONCLUSION"
+            exit 1
+          fi
+
+          echo "workflow_name=$WORKFLOW_NAME" >> $GITHUB_OUTPUT
+          echo "created_at=$CREATED_AT" >> $GITHUB_OUTPUT
+          echo "actor=$ACTOR" >> $GITHUB_OUTPUT
+
+      - name: Download artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p /tmp/proof-artifacts
+          gh run download ${{ steps.parse.outputs.run_id }} \
+            --repo ${{ steps.parse.outputs.owner }}/${{ steps.parse.outputs.repo }} \
+            --dir /tmp/proof-artifacts || true
+
+      - name: Extract proof details
+        id: proof
+        run: |
+          CERT=$(find /tmp/proof-artifacts -name "certificate.json" | head -1)
+          if [[ -z "$CERT" ]]; then
+            echo "No certificate.json found in artifacts"
+            exit 1
+          fi
+
+          TYPE=$(jq -r '.type // .proof_type // "unknown"' "$CERT")
+          CLAIM=$(jq -r '.username // .profile // .claim // "verified"' "$CERT")
+
+          echo "type=$TYPE" >> $GITHUB_OUTPUT
+          echo "claim=$CLAIM" >> $GITHUB_OUTPUT
+
+      - name: Add to leaderboard
+        run: |
+          ENTRY=$(cat << EOF
+          {
+            "run_url": "${{ inputs.run_url }}",
+            "owner": "${{ steps.parse.outputs.owner }}",
+            "repo": "${{ steps.parse.outputs.repo }}",
+            "run_id": "${{ steps.parse.outputs.run_id }}",
+            "workflow_name": "${{ steps.parse.outputs.workflow_name }}",
+            "proof_type": "${{ steps.proof.outputs.type }}",
+            "claim": "${{ steps.proof.outputs.claim }}",
+            "submitted_by": "${{ github.actor }}",
+            "submitted_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "run_created_at": "${{ steps.parse.outputs.created_at }}",
+            "run_actor": "${{ steps.parse.outputs.actor }}"
+          }
+          EOF
+          )
+
+          # Append to leaderboard
+          if [[ -f leaderboard/proofs.json ]]; then
+            jq --argjson entry "$ENTRY" '. += [$entry]' leaderboard/proofs.json > /tmp/proofs.json
+            mv /tmp/proofs.json leaderboard/proofs.json
+          else
+            mkdir -p leaderboard
+            echo "[$ENTRY]" | jq '.' > leaderboard/proofs.json
+          fi
+
+      - name: Commit and push
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add leaderboard/proofs.json
+          git commit -m "Add proof: ${{ steps.proof.outputs.type }} by ${{ github.actor }}"
+          git push

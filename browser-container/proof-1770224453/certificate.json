@@ -1,0 +1,10 @@
+{
+  "type": "tweet-capture",
+  "tweet_url": "https://x.com/socrates1024/status/2018755363315593331",
+  "tweet_text": "&quot;it&#39;s easy, just speak to it the way you would to a cryptic genie, or to a small child with a karate brown belt&quot;— Andrew Miller (@socrates1024) February 3, 2026\n",
+  "author_handle": "socrates1024",
+  "author_name": "Andrew Miller",
+  "recipient_address": "0x1234567890abcdef1234567890abcdef12345678",
+  "logged_in_verified": true,
+  "timestamp": "2026-02-04T17:01:03Z"
+}

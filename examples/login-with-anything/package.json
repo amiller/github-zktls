@@ -1,11 +1,13 @@
 {
-  "name": "relying-party",
+  "name": "login-with-anything",
   "type": "module",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
+    "@octokit/rest": "^21.0.0",
+    "adm-zip": "^0.5.10",
     "express": "^4.21.2"
   }
 }

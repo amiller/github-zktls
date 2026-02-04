@@ -1,8 +1,9 @@
 import express from 'express'
 import Anthropic from '@anthropic-ai/sdk'
-import { execSync } from 'child_process'
 import fs from 'fs'
+import path from 'path'
 import { PROOF_CATALOG, getRandomProofs, getTotalProofCount } from './proofs.js'
+import { getWorkflowRun, getWorkflowContent, downloadArtifacts } from './github.js'
 
 const app = express()
 app.use(express.json())
@@ -114,21 +115,36 @@ const CANONICAL_WORKFLOWS = new Map()
 
 // Load canonical workflows from .github/workflows on startup
 function loadCanonicalWorkflows() {
-  try {
-    const workflowDir = '../../.github/workflows'
-    const files = fs.readdirSync(workflowDir).filter(f => f.endsWith('.yml'))
-    for (const file of files) {
-      const content = fs.readFileSync(`${workflowDir}/${file}`, 'utf8')
-      // Extract proof type from certificate.json "type" field in workflow
-      const typeMatch = content.match(/"type":\s*"([^"]+)"/)
-      if (typeMatch) CANONICAL_WORKFLOWS.set(typeMatch[1], content)
-    }
-    console.log(`Loaded ${CANONICAL_WORKFLOWS.size} canonical workflows`)
-  } catch (e) {
-    console.log('Could not load canonical workflows:', e.message)
+  const workflowDirs = ['../../.github/workflows', '.github/workflows']
+  for (const workflowDir of workflowDirs) {
+    try {
+      const files = fs.readdirSync(workflowDir).filter(f => f.endsWith('.yml'))
+      for (const file of files) {
+        const content = fs.readFileSync(path.join(workflowDir, file), 'utf8')
+        const typeMatch = content.match(/"type":\s*"([^"]+)"/)
+        if (typeMatch) CANONICAL_WORKFLOWS.set(typeMatch[1], content)
+      }
+      if (CANONICAL_WORKFLOWS.size > 0) {
+        console.log(`Loaded ${CANONICAL_WORKFLOWS.size} canonical workflows from ${workflowDir}`)
+        return
+      }
+    } catch {}
   }
+  console.log('Could not load canonical workflows (will verify via GitHub API)')
 }
 loadCanonicalWorkflows()
+
+// Recursively find file in directory
+function findFile(dir, filename) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name)
+    if (entry.isDirectory()) {
+      const found = findFile(full, filename)
+      if (found) return found
+    } else if (entry.name === filename) return full
+  }
+  return null
+}
 
 // Verify a GitHub Actions proof and create session
 app.post('/api/verify', async (req, res) => {
@@ -138,9 +154,8 @@ app.post('/api/verify', async (req, res) => {
 
   const [, owner, repo, runId] = match
   try {
-    // Fetch run metadata including workflow path and commit SHA
-    const runJson = execSync(`gh api /repos/${owner}/${repo}/actions/runs/${runId}`, { encoding: 'utf8' })
-    const runData = JSON.parse(runJson)
+    // Fetch run metadata
+    const runData = await getWorkflowRun(owner, repo, runId)
     if (runData.conclusion !== 'success') return res.status(400).json({ error: `Run not successful: ${runData.conclusion}` })
 
     const { head_sha, path: workflowPath } = runData
@@ -149,29 +164,25 @@ app.post('/api/verify', async (req, res) => {
     // Fetch workflow content at exact commit SHA
     let workflowContent = null, workflowVerified = false, workflowMismatch = null
     try {
-      const contentJson = execSync(`gh api /repos/${owner}/${repo}/contents/${workflowPath}?ref=${head_sha}`, { encoding: 'utf8' })
-      const contentData = JSON.parse(contentJson)
-      workflowContent = Buffer.from(contentData.content, 'base64').toString('utf8')
+      workflowContent = await getWorkflowContent(owner, repo, workflowPath, head_sha)
     } catch (e) {
       console.log('Could not fetch workflow content:', e.message)
     }
 
-    // Download artifacts to temp dir
+    // Download artifacts
     const tmpDir = `/tmp/proof-${runId}`
-    execSync(`rm -rf ${tmpDir} && mkdir -p ${tmpDir}`)
-    execSync(`gh run download ${runId} --repo ${owner}/${repo} --dir ${tmpDir}`, { encoding: 'utf8' })
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+    await downloadArtifacts(owner, repo, runId, tmpDir)
 
     // Find and parse certificate
-    const certPath = execSync(`find ${tmpDir} -name "certificate.json" | head -1`, { encoding: 'utf8' }).trim()
+    const certPath = findFile(tmpDir, 'certificate.json')
     if (!certPath) return res.status(400).json({ error: 'No certificate found in artifacts' })
-    const cert = JSON.parse(execSync(`cat "${certPath}"`, { encoding: 'utf8' }))
+    const cert = JSON.parse(fs.readFileSync(certPath, 'utf8'))
 
     // Find screenshot if available
     let screenshot = null
-    try {
-      const screenshotPath = execSync(`find ${tmpDir} -name "screenshot.png" | head -1`, { encoding: 'utf8' }).trim()
-      if (screenshotPath) screenshot = fs.readFileSync(screenshotPath).toString('base64')
-    } catch {}
+    const screenshotPath = findFile(tmpDir, 'screenshot.png')
+    if (screenshotPath) screenshot = fs.readFileSync(screenshotPath).toString('base64')
 
     // Verify workflow against canonical if we have one
     const norm = normalizeCert(cert)

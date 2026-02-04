@@ -145,6 +145,34 @@ const server = http.createServer(async (req, res) => {
     return
   }
 
+  // Evaluate JavaScript in page context
+  if (url.pathname === '/eval' && req.method === 'POST') {
+    const body = await readBody(req)
+    try {
+      const { script } = JSON.parse(body)
+      const result = await sendCommand('eval', { script })
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify(result.result))
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: e.message }))
+    }
+    return
+  }
+
+  // Get logged-in user by capturing Twitter API calls
+  if (url.pathname === '/twitter/me' && req.method === 'GET') {
+    try {
+      const result = await sendCommand('getLoggedInUser', {}, 15000)
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify(result.result))
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: e.message }))
+    }
+    return
+  }
+
   // Get screenshot directly
   if (url.pathname === '/screenshot' && req.method === 'GET') {
     try {

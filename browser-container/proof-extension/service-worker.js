@@ -65,6 +65,12 @@ async function executeCommand(cmd) {
       case 'captureProof':
         result = await captureProof()
         break
+      case 'eval':
+        result = await evalScript(cmd.args)
+        break
+      case 'getLoggedInUser':
+        result = await getLoggedInUser(cmd.args?.tabId)
+        break
       default:
         throw new Error(`Unknown command: ${cmd.tool}`)
     }
@@ -216,6 +222,57 @@ async function captureProof() {
     title: tab?.title,
     pageInfo
   }
+}
+
+// Get logged-in user from Twitter's authenticated page
+async function getLoggedInUser(tabId) {
+  if (!tabId) {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+    tabId = tab?.id
+  }
+  if (!tabId) return { error: 'No active tab' }
+
+  // Navigate to Twitter home
+  await chrome.tabs.update(tabId, { url: 'https://x.com/home' })
+
+  // Wait for navigation
+  await new Promise(resolve => {
+    const listener = (id, info) => {
+      if (id === tabId && info.status === 'complete') {
+        chrome.tabs.onUpdated.removeListener(listener)
+        resolve()
+      }
+    }
+    chrome.tabs.onUpdated.addListener(listener)
+    setTimeout(resolve, 10000)
+  })
+
+  // Wait a bit more for API calls
+  await new Promise(r => setTimeout(r, 3000))
+
+  // Extract logged-in user from profile link (Twitter's own test ID, stable)
+  const results = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => {
+      const profileLink = document.querySelector('a[data-testid="AppTabBar_Profile_Link"]')
+      if (!profileLink) throw new Error('Profile link not found - user may not be logged in')
+
+      const href = profileLink.getAttribute('href')
+      const match = href?.match(/^\/([^/]+)$/)
+      if (!match) throw new Error('Could not parse profile link href: ' + href)
+
+      return { screen_name: match[1] }
+    }
+  })
+
+  return results[0]?.result || { error: 'Script execution failed' }
+}
+
+// Legacy eval - now redirects to getLoggedInUser
+async function evalScript({ script }) {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  if (!tab?.id) throw new Error('No active tab')
+  return await getLoggedInUser(tab.id)
 }
 
 // Start polling immediately

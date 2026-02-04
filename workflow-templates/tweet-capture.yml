@@ -1,0 +1,183 @@
+# Tweet Capture Attestation Workflow
+#
+# PURPOSE: Prove you authored a tweet by capturing it while logged in.
+#
+# ARTIFACT: JSON certificate containing:
+#   - tweet_url, tweet_text
+#   - author_handle (verified via login)
+#   - recipient_address (for bounty claims)
+#   - timestamp
+#
+# FOR VERIFIERS:
+#   - The workflow verifies the prover is logged in as the tweet author
+#   - Uses Twitter oEmbed (no auth) to get tweet content
+#   - Uses browser session (secret) to verify login
+#   - The artifact hash commits to the certificate.json content
+#
+# TRUST MODEL:
+#   - You trust: Twitter oEmbed returns correct tweet data
+#   - You trust: The login verification step works correctly
+#   - You verify: The workflow code hasn't been modified maliciously
+#
+# SECRETS NEEDED:
+#   - TWITTER_SESSION: JSON with Twitter cookies (ct0, auth_token)
+#
+# USAGE:
+#   1. Fork this repo
+#   2. Add TWITTER_SESSION secret (see browser-container/TWITTER_VERIFICATION.md)
+#   3. Run workflow with tweet URL and your ETH address
+
+name: Tweet Capture
+
+on:
+  workflow_dispatch:
+    inputs:
+      tweet_url:
+        description: 'Tweet URL (e.g., https://x.com/user/status/123)'
+        required: true
+      recipient_address:
+        description: 'ETH address for bounty (0x...)'
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+  attestations: write
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ─────────────────────────────────────────────────────────────
+      # INPUT VALIDATION
+      # Verifiers: Check that these regexes are correct
+      # ─────────────────────────────────────────────────────────────
+      - name: Validate inputs
+        run: |
+          if ! echo "${{ inputs.tweet_url }}" | grep -qE '^https://(x\.com|twitter\.com)/[^/]+/status/[0-9]+'; then
+            echo "Invalid tweet URL format"
+            exit 1
+          fi
+          if ! echo "${{ inputs.recipient_address }}" | grep -qE '^0x[a-fA-F0-9]{40}$'; then
+            echo "Invalid ETH address format"
+            exit 1
+          fi
+
+      # ─────────────────────────────────────────────────────────────
+      # TWEET FETCH (NO AUTH)
+      # Uses public oEmbed endpoint - no secrets involved
+      # Verifiers: This is the source of truth for tweet content
+      # ─────────────────────────────────────────────────────────────
+      - name: Fetch tweet via oEmbed
+        run: |
+          mkdir -p proof
+          curl -s "https://publish.twitter.com/oembed?url=${{ inputs.tweet_url }}" > proof/oembed.json
+
+          if ! jq -e '.author_url' proof/oembed.json > /dev/null 2>&1; then
+            echo "Failed to fetch tweet"
+            cat proof/oembed.json
+            exit 1
+          fi
+
+          AUTHOR_URL=$(jq -r '.author_url' proof/oembed.json)
+          AUTHOR_HANDLE=$(echo "$AUTHOR_URL" | sed 's|https://twitter.com/||')
+          echo "$AUTHOR_HANDLE" > proof/expected_author.txt
+          echo "Tweet by: @$AUTHOR_HANDLE"
+
+      # ─────────────────────────────────────────────────────────────
+      # BROWSER SETUP
+      # Starts a headless browser for login verification
+      # ─────────────────────────────────────────────────────────────
+      - name: Start browser
+        run: |
+          cd browser-container
+          docker compose up -d --build
+          sleep 10
+          curl -f http://localhost:3002/health
+
+      # ─────────────────────────────────────────────────────────────
+      # LOGIN VERIFICATION
+      # This is the key step: proves prover controls the account
+      # Uses TWITTER_SESSION secret to inject cookies
+      # Verifiers: Check this step carefully
+      # ─────────────────────────────────────────────────────────────
+      - name: Verify logged in as tweet author
+        env:
+          SESSION_JSON: ${{ secrets.TWITTER_SESSION }}
+        run: |
+          EXPECTED_AUTHOR=$(cat proof/expected_author.txt)
+
+          # Inject session cookies
+          echo "$SESSION_JSON" | curl -X POST http://localhost:3002/session \
+            -H "Content-Type: application/json" -d @-
+
+          # Navigate to account settings
+          curl -X POST http://localhost:3002/navigate \
+            -H "Content-Type: application/json" \
+            -d '{"url":"https://x.com/settings/account"}'
+          sleep 3
+
+          # Get logged-in username from page
+          LOGGED_IN_USER=$(curl -s -X POST http://localhost:3002/eval \
+            -H "Content-Type: application/json" \
+            -d '{"script":"document.querySelector(\"a[data-testid=AppTabBar_Profile_Link]\")?.getAttribute(\"href\")?.slice(1) || \"\""}' \
+            | jq -r '.')
+
+          echo "Expected: $EXPECTED_AUTHOR"
+          echo "Logged in: $LOGGED_IN_USER"
+
+          # Must match (case insensitive)
+          if [ "${LOGGED_IN_USER,,}" != "${EXPECTED_AUTHOR,,}" ]; then
+            echo "MISMATCH: Must be logged in as @$EXPECTED_AUTHOR"
+            exit 1
+          fi
+          echo "✓ Login verified"
+
+      # ─────────────────────────────────────────────────────────────
+      # CERTIFICATE GENERATION
+      # This JSON becomes the artifact that gets attested
+      # Verifiers: This is what artifactHash commits to
+      # ─────────────────────────────────────────────────────────────
+      - name: Generate certificate
+        run: |
+          AUTHOR_HANDLE=$(cat proof/expected_author.txt)
+          AUTHOR_NAME=$(jq -r '.author_name' proof/oembed.json)
+          TWEET_HTML=$(jq -r '.html' proof/oembed.json)
+          TWEET_TEXT=$(echo "$TWEET_HTML" | sed 's/<[^>]*>//g' | head -c 1000)
+
+          cat > proof/certificate.json << EOF
+          {
+            "type": "tweet-capture",
+            "tweet_url": "${{ inputs.tweet_url }}",
+            "tweet_text": $(echo "$TWEET_TEXT" | jq -Rs .),
+            "author_handle": "$AUTHOR_HANDLE",
+            "author_name": "$AUTHOR_NAME",
+            "recipient_address": "${{ inputs.recipient_address }}",
+            "login_verified": true,
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "workflow_run": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          }
+          EOF
+
+          echo "Certificate:" && cat proof/certificate.json
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tweet-proof
+          path: proof/
+
+      # ─────────────────────────────────────────────────────────────
+      # SIGSTORE ATTESTATION
+      # This creates the attestation that gets ZK-proven
+      # ─────────────────────────────────────────────────────────────
+      - name: Attest
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: proof/certificate.json
+
+      - name: Cleanup
+        if: always()
+        run: cd browser-container && docker compose down

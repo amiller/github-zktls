@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Agent Escrow - Bounty Marketplace</title>
+  <script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #111; color: #eee; }
+    h1 { border-bottom: 1px solid #333; padding-bottom: 10px; }
+    h2 { margin-top: 30px; color: #aaa; }
+    button { background: #2563eb; color: white; border: none; padding: 10px 20px; cursor: pointer; border-radius: 4px; }
+    button:hover { background: #1d4ed8; }
+    button:disabled { background: #444; cursor: not-allowed; }
+    input, textarea { width: 100%; padding: 10px; margin: 5px 0 15px; background: #222; border: 1px solid #333; color: #eee; border-radius: 4px; }
+    textarea { min-height: 100px; resize: vertical; }
+    .card { background: #1a1a1a; border: 1px solid #333; padding: 15px; margin: 10px 0; border-radius: 8px; }
+    .card h3 { margin-top: 0; }
+    .status { padding: 5px 10px; border-radius: 4px; font-size: 12px; }
+    .status.open { background: #166534; }
+    .status.claimed { background: #854d0e; }
+    .amount { color: #22c55e; font-weight: bold; }
+    #wallet { position: fixed; top: 20px; right: 20px; }
+    .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+    .tab { padding: 10px 20px; background: #222; border: none; color: #aaa; cursor: pointer; border-radius: 4px; }
+    .tab.active { background: #2563eb; color: white; }
+    .section { display: none; }
+    .section.active { display: block; }
+    #log { background: #0a0a0a; padding: 10px; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto; }
+  </style>
+</head>
+<body>
+  <div id="wallet">
+    <button id="connectBtn" onclick="connect()">Connect Wallet</button>
+    <span id="address"></span>
+  </div>
+
+  <h1>Agent Escrow</h1>
+  <p>Bounty marketplace with ZK proof verification</p>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('browse')">Browse Bounties</button>
+    <button class="tab" onclick="showTab('create')">Create Bounty</button>
+    <button class="tab" onclick="showTab('claim')">Submit Claim</button>
+  </div>
+
+  <div id="browse" class="section active">
+    <h2>Open Bounties</h2>
+    <div id="bounties">Loading...</div>
+  </div>
+
+  <div id="create" class="section">
+    <h2>Create Bounty</h2>
+    <label>Prompt (what should the tweet say?)</label>
+    <textarea id="prompt" placeholder="e.g., Say something nice about Solana"></textarea>
+    <label>Reward (ETH)</label>
+    <input type="text" id="reward" value="0.01" />
+    <label>Deadline (hours from now)</label>
+    <input type="number" id="deadline" value="24" />
+    <button onclick="createBounty()">Create Bounty</button>
+  </div>
+
+  <div id="claim" class="section">
+    <h2>Submit Claim</h2>
+    <label>Bounty ID</label>
+    <input type="number" id="bountyId" />
+    <label>Tweet URL</label>
+    <input type="text" id="tweetUrl" placeholder="https://x.com/user/status/123..." />
+    <label>Attestation Bundle (JSON)</label>
+    <textarea id="attestation" placeholder="Paste the Sigstore attestation bundle from GitHub Actions"></textarea>
+    <button onclick="submitClaim()">Submit Claim</button>
+  </div>
+
+  <h2>Log</h2>
+  <div id="log"></div>
+
+  <script>
+    const ESCROW_ADDRESS = '0xCaf55AE557b6a92D1B72AfeFf59a0C42D830736E' // Base Sepolia
+    const ESCROW_ABI = [
+      'function createBounty(bytes32 promptHash, string promptUri, address judge, uint256 deadline) payable returns (uint256)',
+      'function submitClaim(uint256 bountyId, bytes proof, bytes32[] publicInputs) returns (uint256)',
+      'function getBounty(uint256 bountyId) view returns (tuple(address creator, uint256 amount, bytes32 promptHash, string promptUri, address judge, uint256 deadline, bool claimed))',
+      'function nextBountyId() view returns (uint256)',
+      'event BountyCreated(uint256 indexed bountyId, address indexed creator, uint256 amount, bytes32 promptHash, string promptUri, address judge, uint256 deadline)'
+    ]
+
+    let provider, signer, escrow
+
+    function log(msg) {
+      const el = document.getElementById('log')
+      el.innerHTML = `${new Date().toLocaleTimeString()}: ${msg}<br>` + el.innerHTML
+    }
+
+    function showTab(name) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'))
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'))
+      document.querySelector(`[onclick="showTab('${name}')"]`).classList.add('active')
+      document.getElementById(name).classList.add('active')
+    }
+
+    async function connect() {
+      if (!window.ethereum) return alert('Install MetaMask')
+      provider = new ethers.providers.Web3Provider(window.ethereum)
+      await provider.send('eth_requestAccounts', [])
+      signer = provider.getSigner()
+      const addr = await signer.getAddress()
+      document.getElementById('address').textContent = addr.slice(0, 6) + '...' + addr.slice(-4)
+      document.getElementById('connectBtn').textContent = 'Connected'
+      escrow = new ethers.Contract(ESCROW_ADDRESS, ESCROW_ABI, signer)
+      log('Connected: ' + addr)
+      loadBounties()
+    }
+
+    async function loadBounties() {
+      if (!escrow) return
+      const container = document.getElementById('bounties')
+      container.innerHTML = ''
+
+      try {
+        const nextId = await escrow.nextBountyId()
+        if (nextId.eq(0)) {
+          container.innerHTML = '<p>No bounties yet</p>'
+          return
+        }
+
+        for (let i = 0; i < nextId.toNumber(); i++) {
+          const b = await escrow.getBounty(i)
+          const card = document.createElement('div')
+          card.className = 'card'
+          card.innerHTML = `
+            <h3>Bounty #${i} <span class="status ${b.claimed ? 'claimed' : 'open'}">${b.claimed ? 'Claimed' : 'Open'}</span></h3>
+            <p><span class="amount">${ethers.utils.formatEther(b.amount)} ETH</span></p>
+            <p>Prompt: <a href="${b.promptUri}" target="_blank">${b.promptUri}</a></p>
+            <p>Deadline: ${new Date(b.deadline.toNumber() * 1000).toLocaleString()}</p>
+          `
+          container.appendChild(card)
+        }
+      } catch (e) {
+        container.innerHTML = '<p>Error loading bounties: ' + e.message + '</p>'
+      }
+    }
+
+    async function createBounty() {
+      if (!signer) return alert('Connect wallet first')
+
+      const prompt = document.getElementById('prompt').value
+      const reward = document.getElementById('reward').value
+      const hours = parseInt(document.getElementById('deadline').value)
+
+      log('Uploading prompt to IPFS...')
+      // TODO: Actually upload to IPFS - for now use a placeholder
+      const promptUri = 'ipfs://QmTODO'
+      const promptHash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(prompt))
+      const deadline = Math.floor(Date.now() / 1000) + hours * 3600
+      const judgeAddress = await signer.getAddress() // Self-judge for testing
+
+      log('Creating bounty...')
+      try {
+        const tx = await escrow.createBounty(promptHash, promptUri, judgeAddress, deadline, {
+          value: ethers.utils.parseEther(reward)
+        })
+        log('Tx: ' + tx.hash)
+        await tx.wait()
+        log('Bounty created!')
+        loadBounties()
+        showTab('browse')
+      } catch (e) {
+        log('Error: ' + e.message)
+      }
+    }
+
+    async function submitClaim() {
+      if (!signer) return alert('Connect wallet first')
+
+      const bountyId = document.getElementById('bountyId').value
+      const tweetUrl = document.getElementById('tweetUrl').value
+      const attestation = document.getElementById('attestation').value
+
+      log('Generating ZK proof...')
+      // TODO: Actually generate proof from attestation
+      const proof = '0x'
+      const publicInputs = []
+
+      log('Submitting claim...')
+      try {
+        const tx = await escrow.submitClaim(bountyId, proof, publicInputs)
+        log('Tx: ' + tx.hash)
+        await tx.wait()
+        log('Claim submitted! Waiting for judge approval...')
+      } catch (e) {
+        log('Error: ' + e.message)
+      }
+    }
+
+    // Auto-connect if already authorized
+    if (window.ethereum) {
+      window.ethereum.request({ method: 'eth_accounts' }).then(accounts => {
+        if (accounts.length > 0) connect()
+      })
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,164 @@
+name: Tweet Capture
+
+on:
+  workflow_dispatch:
+    inputs:
+      tweet_url:
+        description: 'Tweet URL to capture (e.g., https://x.com/user/status/123)'
+        required: true
+      recipient_address:
+        description: 'ETH address to receive bounty (0x...)'
+        required: true
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate inputs
+        run: |
+          if ! echo "${{ inputs.tweet_url }}" | grep -qE '^https://(x\.com|twitter\.com)/[^/]+/status/[0-9]+'; then
+            echo "Invalid tweet URL format"
+            exit 1
+          fi
+          if ! echo "${{ inputs.recipient_address }}" | grep -qE '^0x[a-fA-F0-9]{40}$'; then
+            echo "Invalid ETH address format"
+            exit 1
+          fi
+
+      - name: Extract tweet via oEmbed
+        run: |
+          mkdir -p proof
+
+          # oEmbed returns clean structured data, no auth needed
+          curl -s "https://publish.twitter.com/oembed?url=${{ inputs.tweet_url }}" > proof/oembed.json
+
+          # Parse the response
+          if ! jq -e '.author_url' proof/oembed.json > /dev/null 2>&1; then
+            echo "Failed to fetch tweet via oEmbed"
+            cat proof/oembed.json
+            exit 1
+          fi
+
+          # Extract fields
+          AUTHOR_URL=$(jq -r '.author_url' proof/oembed.json)
+          AUTHOR_HANDLE=$(echo "$AUTHOR_URL" | sed 's|https://twitter.com/||')
+          AUTHOR_NAME=$(jq -r '.author_name' proof/oembed.json)
+
+          # Extract tweet text from HTML (strip tags)
+          TWEET_HTML=$(jq -r '.html' proof/oembed.json)
+          TWEET_TEXT=$(echo "$TWEET_HTML" | sed 's/<[^>]*>//g' | sed 's/&mdash;/—/g' | head -c 1000)
+
+          echo "Author: @$AUTHOR_HANDLE ($AUTHOR_NAME)"
+          echo "Tweet: $TWEET_TEXT"
+
+          # Save for later steps
+          echo "$AUTHOR_HANDLE" > proof/expected_author.txt
+
+      - name: Start browser container
+        run: |
+          cd browser-container
+          docker compose up -d --build
+          sleep 10
+          curl -f http://localhost:3002/health
+
+      - name: Verify logged-in user matches tweet author
+        env:
+          SESSION_JSON: ${{ secrets.TWITTER_SESSION }}
+        run: |
+          EXPECTED_AUTHOR=$(cat proof/expected_author.txt)
+
+          # Inject session cookies
+          if [ -z "$SESSION_JSON" ]; then
+            echo "TWITTER_SESSION secret not set"
+            exit 1
+          fi
+          echo "$SESSION_JSON" | curl -X POST http://localhost:3002/session \
+            -H "Content-Type: application/json" -d @-
+
+          # Navigate to settings page to get logged-in username
+          curl -X POST http://localhost:3002/navigate \
+            -H "Content-Type: application/json" \
+            -d '{"url":"https://x.com/settings/account"}'
+
+          sleep 3
+
+          # Extract logged-in username from page
+          LOGGED_IN_USER=$(curl -s -X POST http://localhost:3002/eval \
+            -H "Content-Type: application/json" \
+            -d '{"script":"document.querySelector(\"[data-testid=UserName]\")?.innerText || document.querySelector(\"span:contains(@)\")?.innerText || \"\""}' \
+            | jq -r '.' | grep -oP '@\K[a-zA-Z0-9_]+' | head -1)
+
+          echo "Expected author: $EXPECTED_AUTHOR"
+          echo "Logged in as: $LOGGED_IN_USER"
+
+          # Verify match (case insensitive)
+          if [ -z "$LOGGED_IN_USER" ]; then
+            echo "Could not determine logged-in user"
+            exit 1
+          fi
+
+          if [ "${LOGGED_IN_USER,,}" != "${EXPECTED_AUTHOR,,}" ]; then
+            echo "MISMATCH: You must be logged in as @$EXPECTED_AUTHOR to claim this tweet"
+            exit 1
+          fi
+
+          echo "✓ Verified: logged in as tweet author"
+
+      - name: Capture screenshot of tweet
+        run: |
+          # Navigate to the tweet for screenshot
+          curl -X POST http://localhost:3002/navigate \
+            -H "Content-Type: application/json" \
+            -d '{"url":"${{ inputs.tweet_url }}"}'
+
+          sleep 3
+          curl http://localhost:3002/screenshot -o proof/screenshot.png
+
+      - name: Generate certificate
+        run: |
+          AUTHOR_HANDLE=$(cat proof/expected_author.txt)
+          AUTHOR_NAME=$(jq -r '.author_name' proof/oembed.json)
+          TWEET_HTML=$(jq -r '.html' proof/oembed.json)
+          TWEET_TEXT=$(echo "$TWEET_HTML" | sed 's/<[^>]*>//g' | sed 's/&mdash;/—/g' | head -c 1000)
+
+          cat > proof/certificate.json << EOF
+          {
+            "type": "tweet-capture",
+            "tweet_url": "${{ inputs.tweet_url }}",
+            "tweet_text": $(echo "$TWEET_TEXT" | jq -Rs .),
+            "author_handle": "$AUTHOR_HANDLE",
+            "author_name": "$AUTHOR_NAME",
+            "recipient_address": "${{ inputs.recipient_address }}",
+            "logged_in_verified": true,
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "github_run_id": "${{ github.run_id }}",
+            "github_run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          }
+          EOF
+
+          echo "Certificate:"
+          cat proof/certificate.json
+
+      - name: Upload proof artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tweet-proof
+          path: proof/
+          retention-days: 90
+
+      - name: Attest artifact
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: proof/certificate.json
+
+      - name: Cleanup
+        if: always()
+        run: |
+          cd browser-container
+          docker compose down

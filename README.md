@@ -1,183 +1,233 @@
-# GitHub zkTLS
+# ZK Sigstore Attestation
 
-**Use GitHub Actions as a general-purpose verifiable execution environment.**
+**Prove you ran code on GitHub. Verify on-chain. Get paid.**
 
-GitHub Actions is a "poor man's TEE." Two parties who don't trust each other can both trust GitHub. The workflow code is visible, the execution is logged, the artifacts are public. This repo shows how to use it for proofs.
+## Try It: Testnet Faucet
 
-## The Pattern
+Get testnet ETH by proving you have a GitHub account.
 
-Any claim that can be verified by running code can become a GitHub Actions proof:
+```bash
+# 1. Fork this repo on GitHub
+
+# 2. Clone your fork
+git clone https://github.com/YOUR_USERNAME/zk-sigstore-attestation
+cd zk-sigstore-attestation
+
+# 3. Run the faucet workflow
+gh workflow run faucet-claim.yml -f address=0xYOUR_ADDRESS
+
+# 4. Wait for workflow to complete, then download attestation
+gh run list --workflow=faucet-claim.yml  # get RUN_ID
+gh run download RUN_ID -n attestation-bundle
+
+# 5. Generate proof (just Docker required)
+cd zk-proof && docker build -t zkproof .
+docker run --rm -v $(pwd):/work zkproof generate /work/bundle.json /work/proof
+
+# 6. Claim your ETH
+cast send 0xcfb53ce24F4B5CfA3c4a70F559F60e84C96bf863 \
+  "claim(bytes,bytes32[],address)" \
+  $(cat proof/proof.hex) $(cat proof/inputs.json) 0xYOUR_ADDRESS \
+  --rpc-url https://sepolia.base.org --private-key $KEY
+```
+
+**Requirements:** Docker. That's it.
+
+---
+
+## What Is This?
+
+GitHub Actions creates signed attestations (via Sigstore) proving what code ran. This repo provides:
+
+1. **ZK Circuit** - Verifies Sigstore attestations, extracts claims
+2. **On-Chain Verifier** - Solidity contract for trustless verification
+3. **Workflow Templates** - Ready-to-use proofs for common claims
+4. **Docker Prover** - One command to generate proofs
 
 ```
-Prover                          GitHub Actions                    Verifier
-  │                                   │                              │
-  ├── write workflow for claim ──────>│                              │
-  ├── add secrets if needed ─────────>│                              │
-  ├── trigger workflow ──────────────>│                              │
-  │                                   ├── execute proof code         │
-  │                                   ├── generate artifacts         │
-  │                                   │                              │
-  │                                   │<──── fetch workflow @ SHA ───┤
-  │                                   │<──── download artifacts ─────┤
-  │                                   │       verify claim ─────────>│
+You                         GitHub Actions                    Contract
+ │                                │                               │
+ ├── run workflow ───────────────>│                               │
+ │                                ├── execute code                │
+ │                                ├── Sigstore signs attestation  │
+ │                                │                               │
+ ├── download attestation         │                               │
+ ├── docker run zkproof ──────────────────────────────────────────>│
+ │                                │                     verify(proof)
+ │                                │                               │
+ │                                │    ✓ proven: repo X, commit Y, artifact Z
 ```
 
-The commit SHA is a merkle root of the entire repo. Fetching the workflow at that SHA gives you exactly what ran. No ceremony needed—we're trusting GitHub's API over TLS either way.
+## Use Cases
 
-## Examples
+| Proof | What It Proves | Example Use |
+|-------|----------------|-------------|
+| **GitHub Identity** | You control a GitHub account | Faucets, airdrops, Sybil resistance |
+| **Tweet Ownership** | You authored a tweet | Bounties, reputation |
+| **API Access** | You have valid credentials | Service verification |
+| **Computation** | Code produced specific output | Verifiable compute |
 
-| Proof Type | How It Works |
-|------------|--------------|
-| **API key validity** | Workflow calls API, logs success/failure |
-| **Computation result** | Workflow runs code, outputs hash of result |
-| **File existence** | Workflow fetches URL, checksums content |
-| **Browser session** | Workflow runs browser with cookies, screenshots page |
-| **Rate/score/status** | Workflow scrapes authenticated page, extracts data |
+## Quick Start
 
-The browser session case is powerful but complex—it's a special case detailed below.
+### Requirements
 
-## For Provers (Agents)
+- GitHub account
+- Docker ([install](https://docs.docker.com/get-docker/))
+- ~2GB RAM, ~1GB disk for proof generation
 
-1. **Fork this repo** (or create your own)
+### As a Prover
 
-2. **Write a workflow** that proves your claim:
-   ```yaml
-   name: My Proof
-   on:
-     workflow_dispatch:
-   jobs:
-     prove:
-       runs-on: ubuntu-latest
-       steps:
-         - uses: actions/checkout@v4
-         - name: Generate proof
-           run: |
-             # Your proof logic here
-             # Output to proof/ directory
-         - uses: actions/upload-artifact@v4
-           with:
-             name: proof
-             path: proof/
-   ```
+**Step 1: Fork and run a workflow**
 
-3. **Add secrets** if your proof needs credentials:
-   ```bash
-   gh secret set MY_SECRET < secret.txt
-   ```
+Fork this repo, then trigger a workflow:
 
-4. **Run and share:**
-   ```bash
-   gh workflow run my-proof.yml
-   # Share: https://github.com/you/repo/actions/runs/12345
-   ```
+```bash
+# Simple identity proof
+gh workflow run github-identity.yml -f address=0xYOUR_ETH_ADDRESS
 
-### Security for Provers
+# Or tweet ownership proof (requires TWITTER_SESSION secret)
+gh workflow run tweet-capture.yml \
+  -f tweet_url=https://x.com/you/status/123 \
+  -f address=0xYOUR_ETH_ADDRESS
+```
 
-- **Inspect workflows before running.** A malicious workflow could exfiltrate your secrets.
-- **Secrets are sensitive.** GitHub encrypts them, but has access. Use short-lived credentials.
-- **Runs must be visible to verifiers.** Public repo, or grant read access.
+**Step 2: Download the attestation**
 
-## For Verifiers (Agents)
+```bash
+# Find your run
+gh run list --workflow=github-identity.yml
 
-1. **Fetch run metadata:**
-   ```bash
-   gh api /repos/{owner}/{repo}/actions/runs/{run_id}
-   # → head_sha, path (workflow file), conclusion
-   ```
+# Download attestation bundle
+gh run download RUN_ID -n attestation-bundle
+```
 
-2. **Fetch workflow at that exact commit:**
-   ```bash
-   gh api /repos/{owner}/{repo}/contents/{path}?ref={head_sha}
-   # → base64-encoded workflow content
-   ```
+**Step 3: Generate proof**
 
-3. **Verify the workflow** does what it claims:
-   - **Exact match:** Diff against a canonical workflow
-   - **Structural check:** Verify pattern, no exfiltration
-   - **Trust repo:** If from known-good source, accept
+```bash
+docker run --rm -v $(pwd):/work zkproof generate /work/bundle.json /work/proof
 
-4. **Download artifacts:**
-   ```bash
-   gh run download {run_id}
-   ```
+# Outputs:
+#   proof/proof.bin   - ZK proof (10KB)
+#   proof/inputs.bin  - Public inputs
+#   proof/proof.hex   - Hex-encoded for contracts
+```
 
-5. **Verify the claim** matches artifact contents.
+**Step 4: Submit on-chain**
 
-## Browser Session Proofs (Special Case)
+```bash
+# Using cast (foundry)
+cast send $VERIFIER_ADDRESS "verify(bytes,bytes32[])" \
+  $(cat proof/proof.hex) $(cat proof/inputs.hex) \
+  --rpc-url https://sepolia.base.org
+```
 
-Browser login proofs use a containerized browser that accepts cookies and takes screenshots. This is useful for "log in with anything"—prove Twitter followers, eBay feedback, PayPal access, etc.
+### As a Verifier
 
-### How It Works
+**On-chain:**
+
+```solidity
+import {ISigstoreVerifier} from "./ISigstoreVerifier.sol";
+
+contract MyApp {
+    ISigstoreVerifier verifier = ISigstoreVerifier(0x0Af922925AE3602b0dC23c4cFCf54FABe2F54725);
+
+    function doSomething(bytes calldata proof, bytes32[] calldata inputs) external {
+        ISigstoreVerifier.Attestation memory att = verifier.verifyAndDecode(proof, inputs);
+
+        // att.artifactHash - hash of the workflow output
+        // att.repoHash     - hash of the repo name
+        // att.commitSha    - git commit that ran
+
+        // Your logic here...
+    }
+}
+```
+
+**Deployed on Base Sepolia:** [`0x0Af922925AE3602b0dC23c4cFCf54FABe2F54725`](https://sepolia.basescan.org/address/0x0Af922925AE3602b0dC23c4cFCf54FABe2F54725)
+
+## Workflow Templates
+
+Copy these to your `.github/workflows/`:
+
+| Template | Purpose | Secrets Needed |
+|----------|---------|----------------|
+| `github-identity.yml` | Prove GitHub account ownership | None |
+| `tweet-capture.yml` | Prove tweet authorship | `TWITTER_SESSION` |
+| `file-hash.yml` | Prove file contents at commit | None |
+
+See `workflow-templates/` for all templates.
+
+## Generate Proofs in CI
+
+Don't want to run Docker locally? Add proof generation to your workflow:
 
 ```yaml
-- name: Start browser container
+- name: Build prover
+  run: cd zk-proof && docker build -t zkproof .
+
+- name: Generate ZK proof
   run: |
-    cd browser-container
-    docker compose up -d --build
+    docker run --rm -v ${{ github.workspace }}:/work zkproof \
+      generate /work/bundle.json /work/proof
 
-- name: Inject cookies and capture
-  env:
-    SESSION_JSON: ${{ secrets.SITE_COM_SESSION }}
-  run: |
-    echo "$SESSION_JSON" | curl -X POST http://localhost:3002/session -d @-
-    curl -X POST http://localhost:3002/navigate -d '{"url":"https://site.com/profile"}'
-    curl http://localhost:3002/screenshot -o proof/screenshot.png
+- uses: actions/upload-artifact@v4
+  with:
+    name: zk-proof
+    path: proof/
 ```
 
-### Cookie Extraction
+## Repository Structure
 
-```bash
-python extract-cookies.py chrome twitter.com > cookies.json
-gh secret set TWITTER_COM_SESSION < cookies.json
 ```
-
-### Existing Browser Workflows
-
-| Workflow | Proves | Secret |
-|----------|--------|--------|
-| `twitter-proof.yml` | Twitter profile + followers | `TWITTER_COM_SESSION` |
-| `ebay-feedback.yml` | eBay seller feedback | `EBAY_COM_SESSION` |
-| `paypal-balance.yml` | PayPal account access | `PAYPAL_COM_SESSION` |
-| `github-contributions.yml` | GitHub profile | `GITHUB_COM_SESSION` |
-
-### Example: Login With Anything
-
-Reference implementation for verifying browser proofs:
-
-```bash
-cd examples/login-with-anything && npm install
-ANTHROPIC_API_KEY=sk-... node server.js
-# http://localhost:3003
+├── zk-proof/              # Prover tooling
+│   ├── circuits/          # Noir ZK circuit
+│   ├── js/                # Witness generator
+│   └── Dockerfile.bb      # Barretenberg prover
+├── contracts/             # On-chain verification
+│   ├── src/               # ISigstoreVerifier interface + implementation
+│   └── examples/          # Faucet, escrow patterns
+├── workflow-templates/    # Ready-to-use workflows
+├── browser-container/     # Browser automation for login proofs
+└── examples/              # Demo applications
 ```
-
-- Verifies workflow content against canonical
-- Displays proof screenshots
-- Public wall for posting as verified identities
 
 ## Trust Model
 
-| Component | Trust Level |
-|-----------|-------------|
-| GitHub Actions execution | High—logs public, can't fake completion |
-| GitHub Secrets | Medium—encrypted, GitHub has access |
-| Workflow content | Verifiable—fetch at commit SHA, diff |
-| Artifact integrity | High—uploaded by workflow, immutable |
+**What the proof guarantees:**
+- ✓ Valid Sigstore attestation (certificate chain verified in ZK)
+- ✓ Correct claim extraction (artifactHash, repoHash, commitSha)
+- ✓ Immutable binding between repo, commit, and artifact
 
-**This is "good enough" ZK.** For high-stakes proofs, use real ZK (TLSNotary, Reclaim). For most cases—proving ownership, status, membership—GitHub as neutral ground works.
+**What YOU must verify:**
+- The workflow code does what it claims (fetch at commitSha and audit)
+- The artifact interpretation matches your expectations
 
-## Why Not Real ZK?
+See [docs/trust-model.md](docs/trust-model.md) for details.
 
-| | GitHub Actions | True ZK (TLSNotary, etc.) |
-|-|----------------|---------------------------|
-| **Setup** | Fork repo, write YAML | Run notary server, MPC setup |
-| **Trust** | GitHub | Cryptographic |
-| **Cost** | Free | Computation overhead |
-| **Flexibility** | Any code | TLS-specific |
-| **Use case** | Quick proofs, demos | High-value, adversarial |
+## System Requirements
 
-GitHub Actions is a general-purpose verifiable execution environment. ZK proofs are cryptographically sound but specialized. Pick based on your threat model.
+| Component | CPU | RAM | Disk | Time |
+|-----------|-----|-----|------|------|
+| Proof generation | 2+ cores | 2GB | 1GB | ~2 min |
+| GitHub Actions runner | (standard) | (standard) | (standard) | ~3 min |
 
-## Related
+## Development
 
-- [TLSNotary](https://tlsnotary.org/) - True zkTLS with MPC
-- [Reclaim Protocol](https://reclaimprotocol.org/) - zkTLS for web2 credentials
+```bash
+# Run contract tests
+cd contracts && forge test -vv
+
+# Build prover Docker image
+cd zk-proof && docker build -f Dockerfile.bb -t zkproof .
+
+# Compile circuit (requires nargo)
+cd zk-proof/circuits && nargo compile
+```
+
+## Links
+
+- [Trust Model](docs/trust-model.md) - What proofs guarantee
+- [Generating Proofs](docs/generating-proofs.md) - Detailed guide
+- [Auditing Workflows](docs/auditing-workflows.md) - For verifiers
+- [Sigstore](https://sigstore.dev/) - Attestation infrastructure
+- [Noir](https://noir-lang.org/) - ZK language

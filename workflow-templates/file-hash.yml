@@ -1,0 +1,59 @@
+# File Hash Attestation Workflow
+#
+# PURPOSE: Prove a file existed with specific contents at a point in time.
+#
+# ARTIFACT: SHA-256 of the file contents
+#
+# FOR VERIFIERS:
+#   - The artifact hash IS the file hash (no transformation)
+#   - Check that the workflow reads the file directly, no manipulation
+#   - Verify the file path matches what the prover claims
+#
+# USAGE:
+#   1. Copy this file to your repo's .github/workflows/
+#   2. Set FILE_PATH to your file
+#   3. Push to trigger, or use workflow_dispatch
+
+name: File Hash Attestation
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      file_path:
+        description: 'Path to file to attest'
+        required: true
+        default: 'data.txt'
+
+permissions:
+  id-token: write
+  contents: read
+  attestations: write
+
+jobs:
+  attest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine file path
+        id: file
+        run: |
+          # Use input if provided, else default
+          FILE="${{ github.event.inputs.file_path || 'data.txt' }}"
+          echo "path=$FILE" >> $GITHUB_OUTPUT
+
+      - name: Create artifact
+        run: |
+          # The artifact IS the file - no transformation
+          cp "${{ steps.file.outputs.path }}" artifact.txt
+
+          # Log for transparency
+          echo "File: ${{ steps.file.outputs.path }}"
+          echo "SHA-256: $(sha256sum artifact.txt | cut -d' ' -f1)"
+
+      - name: Attest
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: artifact.txt
