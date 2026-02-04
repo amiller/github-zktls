@@ -1,0 +1,6 @@
+# Build artifacts
+circuits/target/
+js/node_modules/
+js/dist/
+
+# Lock files (keep package-lock.json for reproducibility)
