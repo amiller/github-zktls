@@ -32,3 +32,4 @@ npm-debug.log*
 .env.local
 # Keep refs as local symlinks, don't track contents
 refs/*/
+refs/
