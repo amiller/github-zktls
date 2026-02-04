@@ -7,9 +7,9 @@
     "test": "node --test dist/test.js"
   },
   "dependencies": {
-    "@aztec/bb.js": "3.0.0-rc.5",
+    "@aztec/bb.js": "^4.0.0-nightly.20260131",
     "@noble/curves": "^1.4.0",
-    "@noir-lang/noir_js": "1.0.0-beta.17"
+    "@noir-lang/noir_js": "^1.0.0-beta.18"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

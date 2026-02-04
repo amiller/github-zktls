@@ -16,6 +16,8 @@ export interface SigstoreBundle {
   }
 }
 
+const MAX_REPO_LENGTH = 64
+
 export interface CircuitInputs {
   // DSSE envelope (what gets signed) - padded to MAX_PAE_LENGTH
   pae_message: string[]       // PAE-encoded message bytes (2048 padded)
@@ -29,12 +31,19 @@ export interface CircuitInputs {
   leaf_pubkey_y: string[]     // 32 bytes
 
   // Certificate TBS for chain verification (padded to MAX_TBS_LENGTH)
-  cert_tbs: string[]          // TBS portion of certificate (700 padded)
+  cert_tbs: string[]          // TBS portion of certificate (1800 padded)
   cert_tbs_len: string
 
   // Issuer (Fulcio) P-384 signature over TBS
   issuer_sig_r: string[]      // 48 bytes
   issuer_sig_s: string[]      // 48 bytes
+
+  // OIDC claim extraction hints
+  commit_oid_offset: string   // Offset in TBS where commit OID starts
+  repo_oid_offset: string     // Offset in TBS where repo OID starts
+  repo_name: string[]         // Repo name bytes (64 padded)
+  repo_name_len: string
+  artifact_hash_offset: string // Offset in PAE where artifact hash hex string starts
 
   // Public inputs (to be revealed on-chain)
   artifact_hash: string[]     // 32 bytes sha256
@@ -116,12 +125,13 @@ function padTo32Bytes(buf: Buffer): Buffer {
 const P384_ORDER = BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffc7634d81f4372ddf581a0db248b0a77aecec196accc52973')
 const P384_HALF_ORDER = P384_ORDER / 2n
 
-// Parse X.509 certificate to extract public key, OIDC extensions, TBS, and issuer signature
+// Parse X.509 certificate to extract public key, OIDC extensions, TBS, issuer signature, and OID offsets
 export function parseCertificate(derBase64: string): {
   publicKey: { x: Buffer; y: Buffer }
   oidcClaims: Record<string, string>
   tbs: Buffer
   issuerSignature: { r: Buffer; s: Buffer }
+  oidOffsets: { commit: number; repo: number }  // Offsets relative to TBS start
 } {
   const der = Buffer.from(derBase64, 'base64')
 
@@ -175,26 +185,39 @@ export function parseCertificate(derBase64: string): {
   const y = der.subarray(pubkeyIndex + 32, pubkeyIndex + 64)
 
   // Parse OIDC extensions (OID prefix 1.3.6.1.4.1.57264.1.*)
-  // 06 0b 2b 06 01 04 01 83 bf 30 01 XX = 1.3.6.1.4.1.57264.1.XX
+  // Full OID encoding: 06 0b 2b 06 01 04 01 83 bf 30 01 XX
+  // We search for the value bytes (after tag 06 and length 0b)
   const oidcClaims: Record<string, string> = {}
   const oidcPrefix = Buffer.from([0x2b, 0x06, 0x01, 0x04, 0x01, 0x83, 0xbf, 0x30, 0x01])
 
-  let searchStart = 0
-  while (true) {
-    const extOIDIndex = der.indexOf(oidcPrefix, searchStart)
-    if (extOIDIndex === -1) break
+  // Track offsets for specific OIDs (relative to TBS start)
+  let commitOidOffset = -1
+  let repoOidOffset = -1
 
-    const extNum = der[extOIDIndex + oidcPrefix.length]
+  // Search within TBS buffer
+  let searchPos = 0
+  while (searchPos < tbs.length) {
+    const idx = tbs.indexOf(oidcPrefix, searchPos)
+    if (idx === -1) break
+
+    const extNum = tbs[idx + oidcPrefix.length]
     // Find the UTF8String value after this OID
-    const valueStart = findUTF8StringAfter(der, extOIDIndex + oidcPrefix.length + 1)
+    const valueStart = findUTF8StringAfter(tbs, idx + oidcPrefix.length + 1)
     if (valueStart) {
       const oidName = getOIDName(extNum)
       oidcClaims[oidName] = valueStart.value
+
+      // Track offsets for circuit (relative to TBS start, pointing at OID prefix)
+      if (extNum === 0x03) commitOidOffset = idx  // .3 = sha/commit
+      if (extNum === 0x05) repoOidOffset = idx    // .5 = repository
     }
-    searchStart = extOIDIndex + 1
+    searchPos = idx + 1
   }
 
-  return { publicKey: { x, y }, oidcClaims, tbs, issuerSignature }
+  if (commitOidOffset === -1) throw new Error('Commit SHA OID not found in certificate')
+  if (repoOidOffset === -1) throw new Error('Repository OID not found in certificate')
+
+  return { publicKey: { x, y }, oidcClaims, tbs, issuerSignature, oidOffsets: { commit: commitOidOffset, repo: repoOidOffset } }
 }
 
 // Parse DER length field (handles multi-byte lengths)
@@ -262,9 +285,9 @@ function padTo48Bytes(buf: Buffer): Buffer {
 }
 
 function findUTF8StringAfter(der: Buffer, start: number): { value: string } | null {
-  // Look for UTF8String (0x0C) or IA5String (0x16) within next 20 bytes
+  // Look for OCTET STRING (0x04), UTF8String (0x0C), or IA5String (0x16) within next 20 bytes
   for (let i = start; i < Math.min(start + 20, der.length - 2); i++) {
-    if (der[i] === 0x0c || der[i] === 0x16) {
+    if (der[i] === 0x04 || der[i] === 0x0c || der[i] === 0x16) {
       const len = der[i + 1]
       if (len < 0x80 && i + 2 + len <= der.length) {
         return { value: der.subarray(i + 2, i + 2 + len).toString('utf8') }
@@ -328,6 +351,14 @@ function padBuffer(buf: Buffer, len: number): Buffer {
 const MAX_PAE_LENGTH = 2048
 const MAX_TBS_LENGTH = 1800  // Sigstore certs have many OIDC extensions
 
+// Find artifact hash offset in PAE message (the hex string after "sha256":")
+function findArtifactHashOffset(paeMessage: Buffer): number {
+  const marker = Buffer.from('"sha256":"')
+  const idx = paeMessage.indexOf(marker)
+  if (idx === -1) throw new Error('Artifact hash marker not found in PAE message')
+  return idx + marker.length
+}
+
 // Main function: generate circuit inputs from Sigstore bundle
 export function generateCircuitInputs(bundleJson: any): CircuitInputs {
   const bundle = bundleJson.attestations?.[0]?.bundle || bundleJson
@@ -344,8 +375,8 @@ export function generateCircuitInputs(bundleJson: any): CircuitInputs {
   const { r, s } = decodeECDSASignature(sigDer)
   const signature = Buffer.concat([r, s])
 
-  // 3. Parse certificate (includes TBS and issuer signature)
-  const { publicKey, oidcClaims, tbs, issuerSignature } = parseCertificate(cert.rawBytes)
+  // 3. Parse certificate (includes TBS, issuer signature, and OID offsets)
+  const { publicKey, oidcClaims, tbs, issuerSignature, oidOffsets } = parseCertificate(cert.rawBytes)
 
   // Pad TBS to MAX_TBS_LENGTH
   const tbsPadded = padBuffer(tbs, MAX_TBS_LENGTH)
@@ -355,8 +386,13 @@ export function generateCircuitInputs(bundleJson: any): CircuitInputs {
 
   // 5. Compute hashes for public inputs
   const artifactHash = Buffer.from(statement.artifactHash, 'hex')
+  const repoName = Buffer.from(statement.repo)
+  const repoNamePadded = padBuffer(repoName, MAX_REPO_LENGTH)
   const repoHash = createHash('sha256').update(statement.repo).digest()
   const commitSha = Buffer.from(statement.commit, 'hex')
+
+  // 6. Find artifact hash offset in PAE
+  const artifactHashOffset = findArtifactHashOffset(paeMessage)
 
   return {
     pae_message: bufferToStringArray(paeMessagePadded),
@@ -372,6 +408,13 @@ export function generateCircuitInputs(bundleJson: any): CircuitInputs {
 
     issuer_sig_r: bufferToStringArray(issuerSignature.r),
     issuer_sig_s: bufferToStringArray(issuerSignature.s),
+
+    // OIDC claim extraction hints
+    commit_oid_offset: oidOffsets.commit.toString(),
+    repo_oid_offset: oidOffsets.repo.toString(),
+    repo_name: bufferToStringArray(repoNamePadded),
+    repo_name_len: repoName.length.toString(),
+    artifact_hash_offset: artifactHashOffset.toString(),
 
     artifact_hash: bufferToStringArray(artifactHash),
     repo_hash: bufferToStringArray(repoHash),
