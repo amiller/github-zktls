@@ -1,0 +1,32 @@
+name: Attestation Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+  attestations: write
+
+jobs:
+  attest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create test artifact
+        run: |
+          mkdir -p proof
+          echo '{"type":"test","timestamp":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}' > proof/certificate.json
+          tar -cvf proof.tar -C proof .
+
+      - name: Generate Sigstore attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: proof.tar
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-proof
+          path: proof.tar
