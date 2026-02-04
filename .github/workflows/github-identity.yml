@@ -1,0 +1,82 @@
+# GitHub Identity Attestation
+#
+# PURPOSE: Prove you control a GitHub account by running a workflow.
+#
+# ARTIFACT: JSON containing your GitHub username, recipient address, and target faucet.
+#
+# TRUST MODEL:
+#   - The workflow runs in YOUR repo (you triggered it)
+#   - Sigstore signs: "repo X at commit Y produced artifact Z"
+#   - Verifier trusts: this workflow correctly outputs github.actor
+#
+# HOW TO CLAIM:
+#   1. Run this workflow with your ETH address
+#   2. Download the attestation bundle artifact
+#   3. Generate proof: docker run --rm -v $(pwd):/work -e RECIPIENT=0xYOUR_ADDR zkproof generate /work/bundle.json /work/proof
+#   4. Open issue at main repo with title "[CLAIM] Faucet request"
+#   5. Paste contents of proof/claim.json in the issue body
+#
+# NO SECRETS NEEDED - just fork and run.
+
+name: GitHub Identity
+
+on:
+  workflow_dispatch:
+    inputs:
+      recipient_address:
+        description: 'ETH address to receive funds (0x...)'
+        required: true
+      faucet_address:
+        description: 'Faucet contract address (Base Sepolia)'
+        required: true
+        default: '0xcfb53ce24F4B5CfA3c4a70F559F60e84C96bf863'
+
+permissions:
+  id-token: write
+  contents: read
+  attestations: write
+
+jobs:
+  attest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate inputs
+        run: |
+          if ! echo "${{ inputs.recipient_address }}" | grep -qE '^0x[a-fA-F0-9]{40}$'; then
+            echo "Invalid recipient address format"
+            exit 1
+          fi
+          if ! echo "${{ inputs.faucet_address }}" | grep -qE '^0x[a-fA-F0-9]{40}$'; then
+            echo "Invalid faucet address format"
+            exit 1
+          fi
+
+      - name: Generate identity certificate
+        run: |
+          mkdir -p proof
+          cat > proof/certificate.json << EOF
+          {
+            "type": "github-identity",
+            "github_actor": "${{ github.actor }}",
+            "github_repository": "${{ github.repository }}",
+            "recipient_address": "${{ inputs.recipient_address }}",
+            "faucet_address": "${{ inputs.faucet_address }}",
+            "chain_id": 84532,
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "workflow_run": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          }
+          EOF
+          echo "Certificate:" && cat proof/certificate.json
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: identity-proof
+          path: proof/
+
+      - name: Attest
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: proof/certificate.json
