@@ -12,6 +12,9 @@ contracts/broadcast/
 proof-output/
 proof/
 claim-test/
+attestation.json
+certificate.json
+identity-proof/
 browser-container/proof-[0-9]*/
 browser-container/data/
 zk-proof/circuits/proof.json

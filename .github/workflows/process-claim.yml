@@ -76,14 +76,15 @@ jobs:
               return;
             }
 
-            // Validate certificate is an object or string
+            // Convert certificate to hex-encoded bytes for cast
             const certString = typeof claim.certificate === 'string'
               ? claim.certificate
               : JSON.stringify(claim.certificate);
+            const certHex = '0x' + Buffer.from(certString, 'utf8').toString('hex');
 
             core.setOutput('proof', claim.proof);
             core.setOutput('inputs', JSON.stringify(claim.inputs));
-            core.setOutput('certificate', certString);
+            core.setOutput('certificate', certHex);
             core.setOutput('username', claim.username);
             core.setOutput('recipient', claim.recipient);
             core.setOutput('faucet', claim.faucet || '0xDd29de730b99b876f21f3AB5DAfBA6711fF2c6AC');
@@ -94,7 +95,7 @@ jobs:
             console.log(`  Faucet: ${claim.faucet || 'default'}`);
             console.log(`  Proof length: ${claim.proof.length} chars`);
             console.log(`  Inputs count: ${claim.inputs.length}`);
-            console.log(`  Certificate length: ${certString.length} chars`);
+            console.log(`  Certificate: ${certString.length} chars -> ${certHex.length} hex chars`);
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
@@ -127,8 +128,10 @@ jobs:
           set -e
 
           if [ $EXIT_CODE -ne 0 ]; then
+            echo "Cast output:"
+            echo "$OUTPUT"
             # Extract revert reason if present
-            REASON=$(echo "$OUTPUT" | grep -oP 'Error\("\K[^"]+' || echo "Unknown error")
+            REASON=$(echo "$OUTPUT" | grep -oP 'Error\("\K[^"]+' || echo "$OUTPUT" | head -1)
             echo "error_reason=$REASON" >> $GITHUB_OUTPUT
             echo "Transaction failed: $REASON"
             exit 1

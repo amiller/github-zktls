@@ -5,11 +5,11 @@ FROM ubuntu:24.04
 
 # Install dependencies
 RUN apt-get update && apt-get install -y \
-    curl ca-certificates nodejs npm \
+    curl ca-certificates nodejs npm xxd \
     && rm -rf /var/lib/apt/lists/*
 
 # Install nargo
-ARG NARGO_VERSION=1.0.0-beta.3
+ARG NARGO_VERSION=1.0.0-beta.17
 RUN curl -L https://raw.githubusercontent.com/noir-lang/noirup/main/install | bash \
     && /root/.nargo/bin/noirup -v ${NARGO_VERSION}
 ENV PATH="/root/.nargo/bin:${PATH}"
@@ -27,7 +27,7 @@ WORKDIR /prover
 COPY circuits/ ./circuits/
 COPY js/ ./js/
 
-# Install JS dependencies and compile circuit
+# Install JS dependencies (dist/ is pre-built)
 RUN cd js && npm install
 RUN cd circuits && nargo compile
 
@@ -51,7 +51,7 @@ case "$1" in
 
     echo "==> Generating witness from attestation bundle..."
     cd /prover/js
-    node --loader ts-node/esm src/index.ts witness "$BUNDLE"
+    node dist/index.js witness "$BUNDLE"
 
     echo "==> Executing circuit..."
     cd /prover/circuits
