@@ -4,33 +4,24 @@
 
 ## Try It: Testnet Faucet
 
-Get testnet ETH by proving you have a GitHub account.
+Get testnet ETH by proving you have a GitHub account. No ETH required—claim via GitHub Issues.
+
+1. Fork this repo
+2. Run the GitHub Identity workflow
+3. Generate a ZK proof (Docker)
+4. Open an issue titled `[CLAIM]` with your proof
+
+**[→ Full instructions](docs/faucet.md)**
 
 ```bash
-# 1. Fork this repo and run the GitHub Identity workflow
+# Quick version
 gh workflow run github-identity.yml -f recipient_address=0xYOUR_ADDRESS
-
-# 2. Download attestation bundle
 gh run download $(gh run list -L1 --json databaseId -q '.[0].databaseId') -n identity-proof
-
-# 3. Generate proof (Docker only)
-docker run --rm -v $(pwd):/work -e RECIPIENT=0xYOUR_ADDRESS \
-  ghcr.io/amiller/zkproof generate /work/bundle.json /work/proof
-
-# 4. Claim via GitHub Issue (no ETH needed!)
-#    Open issue at this repo titled "[CLAIM] Faucet request"
-#    Paste contents of proof/claim.json
+docker run --rm -v $(pwd):/work -e RECIPIENT=0xYOUR_ADDRESS zkproof generate /work/bundle.json /work/proof
+# Then open issue with proof/claim.json contents
 ```
 
-**Or submit directly** if you have gas:
-```bash
-cast send 0xcfb53ce24F4B5CfA3c4a70F559F60e84C96bf863 \
-  "claim(bytes,bytes32[],address)" \
-  $(cat proof/proof.hex) "$(cat proof/inputs.json)" 0xYOUR_ADDRESS \
-  --rpc-url https://sepolia.base.org --private-key $KEY
-```
-
-**Requirements:** Docker. That's it.
+**Requirements:** Docker, GitHub account.
 
 ---
 
@@ -200,8 +191,6 @@ Don't want to run Docker locally? Add proof generation to your workflow:
 **What YOU must verify:**
 - The workflow code does what it claims (fetch at commitSha and audit)
 - The artifact interpretation matches your expectations
-
-**Note on the Issue-based relayer:** The GitHub Issues claim flow is a convenience for the faucet demo—it lets users claim without holding ETH for gas. This relayer is *not* part of the trust model. Anyone can run their own relayer, or submit transactions directly. The security guarantee comes entirely from the on-chain ZK verification, not from who submits the transaction.
 
 See [docs/trust-model.md](docs/trust-model.md) for details.
 
