@@ -13,6 +13,9 @@ on:
   issues:
     types: [opened]
 
+permissions:
+  issues: write
+
 jobs:
   process-claim:
     if: contains(github.event.issue.title, '[CLAIM]')
@@ -88,12 +91,12 @@ jobs:
         run: |
           # Format inputs as Solidity array
           INPUTS='${{ steps.parse.outputs.inputs }}'
-          # Convert ["0x...", "0x..."] to [0x...,0x...]
           INPUTS_FORMATTED=$(echo "$INPUTS" | jq -r 'join(",")')
 
           echo "Submitting claim to faucet..."
 
-          TX_HASH=$(cast send \
+          set +e
+          OUTPUT=$(cast send \
             ${{ steps.parse.outputs.faucet }} \
             "claim(bytes,bytes32[],address)" \
             "${{ steps.parse.outputs.proof }}" \
@@ -101,8 +104,19 @@ jobs:
             "${{ steps.parse.outputs.recipient }}" \
             --private-key "$RELAYER_KEY" \
             --rpc-url https://sepolia.base.org \
-            --json | jq -r '.transactionHash')
+            --json 2>&1)
+          EXIT_CODE=$?
+          set -e
 
+          if [ $EXIT_CODE -ne 0 ]; then
+            # Extract revert reason if present
+            REASON=$(echo "$OUTPUT" | grep -oP 'Error\("\K[^"]+' || echo "Unknown error")
+            echo "error_reason=$REASON" >> $GITHUB_OUTPUT
+            echo "Transaction failed: $REASON"
+            exit 1
+          fi
+
+          TX_HASH=$(echo "$OUTPUT" | jq -r '.transactionHash')
           echo "tx_hash=$TX_HASH" >> $GITHUB_OUTPUT
           echo "Transaction submitted: $TX_HASH"
 
@@ -137,17 +151,15 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            const errorReason = '${{ steps.submit.outputs.error_reason }}' || 'Unknown';
+
             await github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: `## ❌ Claim Failed\n\n` +
-                    `The transaction could not be processed. ` +
-                    `Check the [workflow logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.\n\n` +
-                    `Common issues:\n` +
-                    `- Invalid proof or inputs\n` +
-                    `- Repo already claimed today (24h cooldown)\n` +
-                    `- Faucet is empty`
+                    `**Reason:** ${errorReason}\n\n` +
+                    `[View logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})`
             });
 
             await github.rest.issues.addLabels({
