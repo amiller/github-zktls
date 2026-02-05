@@ -1,0 +1,144 @@
+# Self-Judging Bounty Claim
+#
+# PURPOSE: Evaluate your work against a bounty prompt using Claude, then attest the result.
+#
+# HOW IT WORKS:
+#   1. Gets the diff between your branch and main
+#   2. Sends diff + prompt to Claude API
+#   3. Claude says "yes" or "no"
+#   4. Outputs certificate with "judgment": "approved" or "rejected"
+#   5. Sigstore attests the certificate
+#
+# TRUST MODEL:
+#   - Worker runs this workflow, but can't fake Claude's response
+#   - GitHub Actions is the TEE - code runs in isolated VM
+#   - Sigstore proves this workflow produced this certificate
+#   - Contract checks certificate contains '"judgment": "approved"'
+#
+# SECRETS NEEDED:
+#   - ANTHROPIC_API_KEY: Your Claude API key (add via gh secret set)
+
+name: Self-Judging Bounty Claim
+
+on:
+  workflow_dispatch:
+    inputs:
+      bounty_id:
+        description: 'Bounty ID on the escrow contract'
+        required: true
+      prompt:
+        description: 'The bounty prompt (what work was requested)'
+        required: true
+      recipient_address:
+        description: 'ETH address to receive payment (0x...)'
+        required: true
+      escrow_address:
+        description: 'SelfJudgingEscrow contract address'
+        required: true
+        default: '0x...'
+
+permissions:
+  id-token: write
+  contents: read
+  attestations: write
+
+jobs:
+  evaluate-and-attest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate inputs
+        run: |
+          if ! echo "${{ inputs.recipient_address }}" | grep -qE '^0x[a-fA-F0-9]{40}$'; then
+            echo "Invalid recipient address format"
+            exit 1
+          fi
+
+      - name: Get diff from main
+        run: |
+          git diff origin/main -- . ':!.github' > /tmp/diff.txt
+          echo "=== DIFF ===" && head -100 /tmp/diff.txt
+
+      - name: Evaluate work with Claude
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          DIFF=$(cat /tmp/diff.txt | head -c 50000)
+          PROMPT='${{ inputs.prompt }}'
+
+          # Escape for JSON
+          DIFF_ESCAPED=$(echo "$DIFF" | jq -Rs .)
+          PROMPT_ESCAPED=$(echo "$PROMPT" | jq -Rs .)
+
+          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "content-type: application/json" \
+            -H "anthropic-version: 2023-06-01" \
+            -d "{
+              \"model\": \"claude-sonnet-4-20250514\",
+              \"max_tokens\": 200,
+              \"messages\": [{
+                \"role\": \"user\",
+                \"content\": \"You are judging whether code changes satisfy a bounty prompt.\\n\\nPROMPT:\\n\"$PROMPT_ESCAPED\"\\n\\nDIFF:\\n\"$DIFF_ESCAPED\"\\n\\nDoes this diff adequately satisfy the prompt? Answer with just 'yes' or 'no' on the first line, then a brief reason.\"
+              }]
+            }")
+
+          echo "Claude response: $RESPONSE"
+
+          # Extract judgment
+          ANSWER=$(echo "$RESPONSE" | jq -r '.content[0].text' | head -1 | tr '[:upper:]' '[:lower:]')
+          REASON=$(echo "$RESPONSE" | jq -r '.content[0].text' | tail -n +2 | head -3)
+
+          if [[ "$ANSWER" == yes* ]]; then
+            echo "JUDGMENT=approved" >> $GITHUB_ENV
+            echo "Claude approved the work"
+          else
+            echo "JUDGMENT=rejected" >> $GITHUB_ENV
+            echo "Claude rejected the work: $REASON"
+          fi
+          echo "REASON<<EOF" >> $GITHUB_ENV
+          echo "$REASON" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Generate certificate
+        run: |
+          mkdir -p proof
+          cat > proof/certificate.json << EOF
+          {
+            "type": "bounty-claim",
+            "bounty_id": "${{ inputs.bounty_id }}",
+            "judgment": "${{ env.JUDGMENT }}",
+            "reason": "${{ env.REASON }}",
+            "github_actor": "${{ github.actor }}",
+            "github_repository": "${{ github.repository }}",
+            "recipient_address": "${{ inputs.recipient_address }}",
+            "escrow_address": "${{ inputs.escrow_address }}",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "workflow_run": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          }
+          EOF
+          echo "=== CERTIFICATE ===" && cat proof/certificate.json
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bounty-proof
+          path: proof/
+
+      - name: Attest certificate
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: proof/certificate.json
+
+      - name: Summary
+        run: |
+          if [ "${{ env.JUDGMENT }}" = "approved" ]; then
+            echo "## Bounty Claim Approved" >> $GITHUB_STEP_SUMMARY
+            echo "Your work was approved by Claude. Generate the ZK proof and submit to claim." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## Bounty Claim Rejected" >> $GITHUB_STEP_SUMMARY
+            echo "Claude did not approve the work. Reason: ${{ env.REASON }}" >> $GITHUB_STEP_SUMMARY
+          fi

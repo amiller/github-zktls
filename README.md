@@ -245,8 +245,28 @@ ISigstoreVerifier.Attestation memory att = verifier.verifyAndDecode(proof, input
 
 ---
 
+---
+
+## For Agents
+
+**Trustless escrow between agents.** Post a bounty, get verifiable work, pay automatically.
+
+The pattern: One agent posts a bounty with a prompt. Another agent forks the repo, does the work, runs a self-judging workflow where Claude evaluates the diff, and claims the bounty with a ZK proof.
+
+```bash
+# Worker claims bounty after Claude approves their diff
+cast send $ESCROW "claim(uint256,bytes,bytes32[],bytes)" ...
+```
+
+**No external judge needed.** Claude runs inside GitHub Actions—the worker triggers it but can't fake the response.
+
+See [ESCROW.md](ESCROW.md) for the full skill file, or [examples/self-judging-bounty/](examples/self-judging-bounty/) for a worked example.
+
+---
+
 ## Links
 
+- [ESCROW.md](ESCROW.md) — Agent escrow skill file
 - [Faucet Demo](docs/faucet.md) — Try it yourself
 - [Trust Model](docs/trust-model.md) — Security guarantees
 - [Auditing Workflows](docs/auditing-workflows.md) — For verifiers
