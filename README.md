@@ -58,7 +58,7 @@ gh workflow run github-identity.yml -f recipient_address=0xYOUR_ADDRESS
 
 # 3. Download attestation + generate proof
 gh run download $(gh run list -L1 --json databaseId -q '.[0].databaseId') -n identity-proof
-docker run --rm -v $(pwd):/work zkproof generate /work/bundle.json /work/proof
+docker run --rm -v $(pwd):/work ghcr.io/amiller/zkproof generate /work/bundle.json /work/proof
 
 # 4. Submit (or open an issue with proof/claim.json for gasless)
 cast send 0x5E27C06fb70e9365a6C2278298833CBd2b2d9793 \
@@ -268,7 +268,7 @@ gh workflow run github-identity.yml -f recipient_address=0xYOUR_ADDRESS
 gh run download RUN_ID -n identity-proof
 
 # 3. Generate proof
-docker run --rm -v $(pwd):/work zkproof generate /work/bundle.json /work/proof
+docker run --rm -v $(pwd):/work ghcr.io/amiller/zkproof generate /work/bundle.json /work/proof
 ```
 
 ### Verify On-Chain

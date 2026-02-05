@@ -1,5 +1,5 @@
 # ZK Proof Generator
-# Usage: docker run --rm -v $(pwd):/work zkproof generate /work/bundle.json /work/output
+# Usage: docker run --rm -v $(pwd):/work ghcr.io/amiller/zkproof generate /work/bundle.json /work/output
 
 FROM ubuntu:24.04
 

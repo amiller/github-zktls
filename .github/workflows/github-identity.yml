@@ -12,7 +12,7 @@
 # HOW TO CLAIM:
 #   1. Run this workflow with your ETH address
 #   2. Download the attestation bundle artifact
-#   3. Generate proof: docker run --rm -v $(pwd):/work -e RECIPIENT=0xYOUR_ADDR zkproof generate /work/bundle.json /work/proof
+#   3. Generate proof: docker run --rm -v $(pwd):/work -e RECIPIENT=0xYOUR_ADDR ghcr.io/amiller/zkproof generate /work/bundle.json /work/proof
 #   4. Open issue at main repo with title "[CLAIM] Faucet request"
 #   5. Paste contents of proof/claim.json in the issue body
 #
