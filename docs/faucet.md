@@ -2,7 +2,7 @@
 
 Claim testnet ETH by proving you control a GitHub account.
 
-**Contract:** [`0x5E27C06fb70e9365a6C2278298833CBd2b2d9793`](https://sepolia.basescan.org/address/0x5E27C06fb70e9365a6C2278298833CBd2b2d9793) (Base Sepolia)
+**Contract:** [`0xf31768d4E42d5e80aE95415309D7908ae730Fb41`](https://sepolia.basescan.org/address/0xf31768d4E42d5e80aE95415309D7908ae730Fb41) (Base Sepolia)
 
 ## How It Works
 
@@ -28,7 +28,7 @@ This creates `yourusername/github-zktls`.
 ```bash
 gh workflow run github-identity.yml \
   -f recipient_address=0xYOUR_ETH_ADDRESS \
-  -f faucet_address=0x5E27C06fb70e9365a6C2278298833CBd2b2d9793
+  -f faucet_address=0xf31768d4E42d5e80aE95415309D7908ae730Fb41
 ```
 
 Or via GitHub UI: **Actions → GitHub Identity → Run workflow**
@@ -64,7 +64,7 @@ proof/
 ## Step 4: Submit to Contract
 
 ```bash
-cast send 0x5E27C06fb70e9365a6C2278298833CBd2b2d9793 \
+cast send 0xf31768d4E42d5e80aE95415309D7908ae730Fb41 \
   "claim(bytes,bytes32[],bytes,string,address)" \
   "$(cat proof/proof.hex)" \
   "$(cat proof/inputs.json)" \
@@ -164,7 +164,7 @@ The username you provided doesn't appear in the certificate. Check that you're u
 Your GitHub username has already claimed in the last 24 hours. Wait and try again tomorrow.
 
 **"Faucet empty"**
-The faucet needs funding. Deposits welcome: `0x5E27C06fb70e9365a6C2278298833CBd2b2d9793`
+The faucet needs funding. Deposits welcome: `0xf31768d4E42d5e80aE95415309D7908ae730Fb41`
 
 **Proof generation fails**
 - Check you downloaded the correct attestation bundle
