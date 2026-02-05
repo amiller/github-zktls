@@ -42,7 +42,10 @@ Claim testnet ETH by proving you have a GitHub account.
 3. **Run the workflow** — Click "GitHub Identity" → "Run workflow"
    - Enter your ETH address (see below if you need one)
    - Click "Run workflow"
-4. **Open an issue to claim** — Once the workflow completes, [open an issue](../../issues/new) titled `[CLAIM]` and paste the contents of your `proof/claim.json` artifact. We'll relay it for you (no gas needed).
+   - The workflow generates a Sigstore attestation, then creates a ZK proof of the attestation
+4. **Claim your ETH:**
+   - **If you have gas:** Download the `identity-proof` artifact, then submit the transaction using `proof/claim.json`
+   - **No gas?** [Open an issue on our repo](https://github.com/anthropics/github-zktls/issues/new) titled `[CLAIM]` and paste your `proof/claim.json`. We'll relay it for you.
 
 ### Option B: Command Line
 
