@@ -1,0 +1,97 @@
+# VK Generation with Sigstore Attestation
+#
+# PURPOSE: Auditable trusted setup for ZK verifier.
+#
+# TRUST MODEL:
+#   - GitHub Actions compiles circuit and generates VK
+#   - Sigstore attests: "this workflow at commit X produced VK Y"
+#   - Anyone can verify: recompile circuit, check hashes match
+#
+# ARTIFACTS:
+#   - vk (raw verification key)
+#   - HonkVerifier.sol (Solidity verifier contract)
+#   - attestation-subject.json (hashes for verification)
+
+name: Generate VK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'zk-proof/circuits/src/**'
+      - 'zk-proof/circuits/Nargo.toml'
+
+permissions:
+  id-token: write
+  contents: read
+  attestations: write
+
+env:
+  NARGO_VERSION: "1.0.0-beta.17"
+  BB_VERSION: "v3.0.3"
+
+jobs:
+  generate-vk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install nargo
+        run: |
+          curl -L https://raw.githubusercontent.com/noir-lang/noirup/refs/heads/main/install | bash
+          ~/.nargo/bin/noirup -v ${{ env.NARGO_VERSION }}
+          echo "$HOME/.nargo/bin" >> $GITHUB_PATH
+
+      - name: Install barretenberg
+        run: |
+          curl -L -o /tmp/bb.tar.gz \
+            "https://github.com/AztecProtocol/aztec-packages/releases/download/${{ env.BB_VERSION }}/barretenberg-amd64-linux.tar.gz"
+          sudo tar -xzf /tmp/bb.tar.gz -C /usr/local/bin bb
+
+      - name: Compile circuit
+        working-directory: zk-proof/circuits
+        run: nargo compile
+
+      - name: Generate VK
+        working-directory: zk-proof/circuits
+        run: bb write_vk -b target/zk_github_attestation.json -o target/vk -t evm
+
+      - name: Generate Solidity verifier
+        working-directory: zk-proof/circuits
+        run: bb write_contract -k target/vk -o target/HonkVerifier.sol
+
+      - name: Compute hashes and create attestation subject
+        working-directory: zk-proof/circuits
+        run: |
+          CIRCUIT_HASH=$(sha256sum target/zk_github_attestation.json | cut -d' ' -f1)
+          VK_HASH=$(sha256sum target/vk | cut -d' ' -f1)
+          VERIFIER_HASH=$(sha256sum target/HonkVerifier.sol | cut -d' ' -f1)
+
+          cat > target/attestation-subject.json << EOF
+          {
+            "type": "zk-trusted-setup",
+            "circuit_hash": "$CIRCUIT_HASH",
+            "vk_hash": "$VK_HASH",
+            "verifier_hash": "$VERIFIER_HASH",
+            "nargo_version": "${{ env.NARGO_VERSION }}",
+            "bb_version": "${{ env.BB_VERSION }}",
+            "commit": "${{ github.sha }}"
+          }
+          EOF
+
+          echo "Attestation subject:"
+          cat target/attestation-subject.json
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: vk-artifacts
+          path: |
+            zk-proof/circuits/target/vk
+            zk-proof/circuits/target/HonkVerifier.sol
+            zk-proof/circuits/target/attestation-subject.json
+
+      - name: Attest VK generation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: zk-proof/circuits/target/attestation-subject.json
