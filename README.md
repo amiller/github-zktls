@@ -67,7 +67,7 @@ gh run watch
 gh run download -n identity-proof
 
 # Submit (or open an issue with claim.json for gasless)
-cast send 0xcfb53ce24F4B5CfA3c4a70F559F60e84C96bf863 \
+cast send 0x5E27C06fb70e9365a6C2278298833CBd2b2d9793 \
   "claim(bytes,bytes32[],bytes,string,address)" \
   "$(cat identity-proof/proof.hex)" "$(cat identity-proof/inputs.json)" \
   "$(cat identity-proof/certificate.json)" "YOUR_GITHUB_USERNAME" 0xYOUR_ADDRESS \

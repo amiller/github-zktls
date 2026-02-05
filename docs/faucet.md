@@ -2,7 +2,7 @@
 
 Claim testnet ETH by proving you control a GitHub account.
 
-**Contract:** [`0xDd29de730b99b876f21f3AB5DAfBA6711fF2c6AC`](https://sepolia.basescan.org/address/0xDd29de730b99b876f21f3AB5DAfBA6711fF2c6AC) (Base Sepolia)
+**Contract:** [`0x5E27C06fb70e9365a6C2278298833CBd2b2d9793`](https://sepolia.basescan.org/address/0x5E27C06fb70e9365a6C2278298833CBd2b2d9793) (Base Sepolia)
 
 ## How It Works
 
@@ -13,7 +13,7 @@ Claim testnet ETH by proving you control a GitHub account.
 5. Submit proof + certificate to contract
 6. Contract verifies `sha256(certificate) == artifactHash` and extracts your username
 
-**Why this works:** The artifact hash is bound to the certificate contents. If you modify the certificate, the hash won't match. The contract parses `"github_actor":"<username>"` from the certificate and rate-limits per user.
+**Why this works:** The artifact hash is bound to the certificate contents. If you modify the certificate, the hash won't match. The contract parses `"github_actor": "<username>"` from the certificate and rate-limits per user.
 
 ## Step 1: Fork and Run
 
@@ -28,7 +28,7 @@ This creates `yourusername/github-zktls`.
 ```bash
 gh workflow run github-identity.yml \
   -f recipient_address=0xYOUR_ETH_ADDRESS \
-  -f faucet_address=0xDd29de730b99b876f21f3AB5DAfBA6711fF2c6AC
+  -f faucet_address=0x5E27C06fb70e9365a6C2278298833CBd2b2d9793
 ```
 
 Or via GitHub UI: **Actions → GitHub Identity → Run workflow**
@@ -64,7 +64,7 @@ proof/
 ## Step 4: Submit to Contract
 
 ```bash
-cast send 0xDd29de730b99b876f21f3AB5DAfBA6711fF2c6AC \
+cast send 0x5E27C06fb70e9365a6C2278298833CBd2b2d9793 \
   "claim(bytes,bytes32[],bytes,string,address)" \
   "$(cat proof/proof.hex)" \
   "$(cat proof/inputs.json)" \
@@ -85,7 +85,7 @@ Done. ETH sent to your address.
 |-------|-----|
 | Valid attestation | ZK proof verifies Sigstore certificate chain |
 | Certificate match | `sha256(certificate) == artifactHash` |
-| Username in cert | `"github_actor":"<username>"` appears in certificate |
+| Username in cert | `"github_actor": "<username>"` appears in certificate |
 | Sybil resistance | One claim per GitHub username per day |
 
 The contract extracts your GitHub username from the certificate and rate-limits per user—not per repo. You can't claim faster by creating multiple forks.
@@ -164,7 +164,7 @@ The username you provided doesn't appear in the certificate. Check that you're u
 Your GitHub username has already claimed in the last 24 hours. Wait and try again tomorrow.
 
 **"Faucet empty"**
-The faucet needs funding. Deposits welcome: `0xDd29de730b99b876f21f3AB5DAfBA6711fF2c6AC`
+The faucet needs funding. Deposits welcome: `0x5E27C06fb70e9365a6C2278298833CBd2b2d9793`
 
 **Proof generation fails**
 - Check you downloaded the correct attestation bundle
