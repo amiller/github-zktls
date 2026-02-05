@@ -58,7 +58,7 @@ jobs:
 
       - name: Generate Solidity verifier
         working-directory: zk-proof/circuits
-        run: bb write_contract -k target/vk -o target/HonkVerifier.sol
+        run: bb write_solidity_verifier -k target/vk -o target/HonkVerifier.sol -t evm
 
       - name: Compute hashes and create attestation subject
         working-directory: zk-proof/circuits
