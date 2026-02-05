@@ -58,13 +58,13 @@ jobs:
 
       - name: Generate Solidity verifier
         working-directory: zk-proof/circuits
-        run: bb write_solidity_verifier -k target/vk -o target/HonkVerifier.sol -t evm
+        run: bb write_solidity_verifier -k target/vk/vk -o target/HonkVerifier.sol -t evm
 
       - name: Compute hashes and create attestation subject
         working-directory: zk-proof/circuits
         run: |
           CIRCUIT_HASH=$(sha256sum target/zk_github_attestation.json | cut -d' ' -f1)
-          VK_HASH=$(sha256sum target/vk | cut -d' ' -f1)
+          VK_HASH=$(sha256sum target/vk/vk | cut -d' ' -f1)
           VERIFIER_HASH=$(sha256sum target/HonkVerifier.sol | cut -d' ' -f1)
 
           cat > target/attestation-subject.json << EOF
@@ -87,7 +87,7 @@ jobs:
         with:
           name: vk-artifacts
           path: |
-            zk-proof/circuits/target/vk
+            zk-proof/circuits/target/vk/
             zk-proof/circuits/target/HonkVerifier.sol
             zk-proof/circuits/target/attestation-subject.json
 
