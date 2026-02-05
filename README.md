@@ -31,13 +31,13 @@ For on-chain verification, attestations are too verbose. Enter ZK:
 
 ---
 
-## Try It: Testnet Faucet
+## Try It: Base Sepolia Faucet
 
 ![Claims](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Familler%2Fgithub-zktls%2Fmaster%2Fexamples%2Fleaderboard%2Fclaims.json&query=%24.stats.totalClaims&label=Claims&color=blue)
 ![Users](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Familler%2Fgithub-zktls%2Fmaster%2Fexamples%2Fleaderboard%2Fclaims.json&query=%24.stats.uniqueUsers&label=Users&color=green)
-![ETH](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Familler%2Fgithub-zktls%2Fmaster%2Fexamples%2Fleaderboard%2Fclaims.json&query=%24.stats.totalEth&label=ETH%20Distributed&color=purple)
+![ETH](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Familler%2Fgithub-zktls%2Fmaster%2Fexamples%2Fleaderboard%2Fclaims.json&query=%24.stats.totalEth&label=Base%20Sepolia%20ETH&color=purple)
 
-Claim testnet ETH by proving you have a GitHub account.
+Claim Base Sepolia testnet ETH by proving you have a GitHub account.
 
 ### Option A: GitHub Web UI (easiest)
 
