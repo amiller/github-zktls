@@ -15,10 +15,13 @@ This is "GitHub as TEE"—a transparent, auditable trusted execution environment
 But what can you prove? Anything the workflow can observe:
 
 4. **Inject credentials** as GitHub Secrets (encrypted, never logged)
-5. **Fetch authenticated data** over TLS inside the runner
-6. **Attest the response** — GitHub signs what the API returned
+5. **Run a browser** with your session cookies inside the runner
+6. **Capture authenticated content** — screenshots, page data, API responses
+7. **Attest the result** — GitHub signs what the browser saw
 
-This is "GitHub as zkTLS"—prove what an API said without revealing your session.
+This is "GitHub as zkTLS"—prove what a website showed you without revealing your session.
+
+The **browser container** is key: a headless Chromium that runs inside GitHub Actions, injected with your session cookies. It captures proof artifacts (screenshots, DOM data) that get attested by Sigstore. Your credentials never leave the runner.
 
 For on-chain verification, attestations are too verbose. Enter ZK:
 
@@ -32,34 +35,39 @@ For on-chain verification, attestations are too verbose. Enter ZK:
 
 Claim testnet ETH by proving you have a GitHub account.
 
-**How it works:** The workflow outputs a `certificate.json` containing your GitHub username. The contract verifies:
-1. The ZK proof is valid (Sigstore signed this attestation)
-2. `sha256(certificate) == artifactHash` (certificate wasn't tampered)
-3. Your username appears in the certificate
-4. You haven't claimed in the last 24 hours
+### Option A: GitHub Web UI (easiest)
+
+1. **Fork this repo** — Click "Fork" at the top of this page
+2. **Go to Actions** — In your fork, click the "Actions" tab
+3. **Run the workflow** — Click "GitHub Identity" → "Run workflow"
+   - Enter your ETH address (see below if you need one)
+   - Click "Run workflow"
+4. **Open an issue to claim** — Once the workflow completes, [open an issue](../../issues/new) titled `[CLAIM]` and paste the contents of your `proof/claim.json` artifact. We'll relay it for you (no gas needed).
+
+### Option B: Command Line
 
 ```bash
-# 1. Fork this repo
-gh repo fork
+# 1. Fork and clone
+gh repo fork --clone
 
 # 2. Run the identity workflow
 gh workflow run github-identity.yml -f recipient_address=0xYOUR_ADDRESS
 
-# 3. Download the attestation bundle + certificate
+# 3. Download attestation + generate proof
 gh run download $(gh run list -L1 --json databaseId -q '.[0].databaseId') -n identity-proof
-
-# 4. Generate ZK proof
 docker run --rm -v $(pwd):/work zkproof generate /work/bundle.json /work/proof
 
-# 5. Submit to contract (note: includes certificate + username)
-cast send 0xDd29de730b99b876f21f3AB5DAfBA6711fF2c6AC \
+# 4. Submit (or open an issue with proof/claim.json for gasless)
+cast send 0x5E27C06fb70e9365a6C2278298833CBd2b2d9793 \
   "claim(bytes,bytes32[],bytes,string,address)" \
   "$(cat proof/proof.hex)" "$(cat proof/inputs.json)" \
   "$(cat identity-proof/certificate.json)" "YOUR_GITHUB_USERNAME" 0xYOUR_ADDRESS \
   --rpc-url https://sepolia.base.org --private-key $YOUR_KEY
 ```
 
-No ETH for gas? [Open an issue](docs/faucet.md#gasless-claims) titled `[CLAIM]` with your proof—we'll relay it.
+### Need an ETH address?
+
+Install [Rabby](https://rabby.io/) or [Rainbow](https://rainbow.me/) wallet. They'll generate an address for you and keep your keys safe. For testnet, any address works—you just need somewhere to receive the ETH.
 
 ---
 
@@ -83,13 +91,14 @@ Fetching the workflow at that commit SHA tells you exactly what executed. No cer
 
 ### Workflow Templates
 
-| Template | Proves | Secrets |
-|----------|--------|---------|
-| `github-identity.yml` | You control a GitHub account | None |
-| `tweet-capture.yml` | You authored a tweet | `TWITTER_SESSION` |
-| `file-hash.yml` | File contents at a commit | None |
+| Template | Proves | Uses Browser |
+|----------|--------|--------------|
+| `github-identity.yml` | GitHub account ownership | No |
+| `twitter-proof.yml` | Twitter account ownership | Yes |
+| `tweet-capture.yml` | Tweet authorship | Yes |
+| `github-contributions.yml` | Contribution graph | Yes |
 
-See [`workflow-templates/`](workflow-templates/) for ready-to-use workflows.
+See [`workflow-templates/`](workflow-templates/) and [`examples/workflows/`](examples/workflows/) for more.
 
 ---
 
@@ -99,24 +108,52 @@ Traditional zkTLS requires MPC ceremonies or specialized notary servers. GitHub 
 
 | Step | What Happens |
 |------|--------------|
-| **1. Store credentials** | Add session cookies/tokens as GitHub Secrets |
-| **2. Run workflow** | Headless browser fetches authenticated data |
-| **3. TLS terminates in runner** | GitHub's isolated VM sees the plaintext |
-| **4. Output becomes artifact** | Tweet content, API response, account data |
+| **1. Store credentials** | Add session cookies as GitHub Secrets |
+| **2. Run browser container** | Headless Chromium starts in the runner |
+| **3. Inject session** | Cookies injected via Chrome extension bridge |
+| **4. Capture proof** | Screenshot + page data extracted |
 | **5. Sigstore attests** | Proof that *this workflow* produced *this output* |
 
 The trust model: GitHub sees your session, but only runs the code you committed. Anyone can audit the workflow. The attestation binds the result to the exact code version.
 
-### Example: Prove Tweet Authorship
+### Browser Container
+
+The [`browser-container/`](browser-container/) runs headless Chromium with a bridge API:
+
+```bash
+# Inject session cookies
+curl -X POST http://localhost:3000/session \
+  -d '{"cookies": [{"name": "auth_token", "value": "...", "domain": ".twitter.com"}]}'
+
+# Navigate and capture
+curl -X POST http://localhost:3000/navigate -d '{"url": "https://twitter.com/home"}'
+curl -X POST http://localhost:3000/capture
+
+# Get artifacts (screenshot + page data)
+curl http://localhost:3000/artifacts
+```
+
+A Chrome extension inside the container handles cookie injection and page capture. The bridge API lets workflows orchestrate the browser without touching credentials directly.
+
+### Example: Prove Twitter Identity
 
 ```yaml
-# .github/workflows/tweet-capture.yml
-- name: Fetch tweet as logged-in user
+# .github/workflows/twitter-proof.yml
+- name: Start browser container
+  run: docker compose up -d browser
+
+- name: Inject session and capture profile
   env:
     TWITTER_SESSION: ${{ secrets.TWITTER_SESSION }}
   run: |
-    # Browser fetches tweet, verifies you're the author
-    node capture-tweet.js $TWEET_ID > tweet.json
+    # Inject cookies (parsed from session string)
+    curl -X POST http://localhost:3000/session -d "$TWITTER_SESSION"
+
+    # Get logged-in username
+    USERNAME=$(curl -s http://localhost:3000/twitter/me | jq -r .username)
+
+    # Generate certificate
+    echo '{"twitter_username": "'$USERNAME'"}' > certificate.json
 ```
 
 The artifact contains the tweet content + proof you authored it. No one else can see your session cookies.
@@ -170,6 +207,11 @@ contract MyApp {
 │   ├── js/                   # Witness generator
 │   └── Dockerfile            # One-command proof generation
 │
+├── browser-container/        # Headless browser for authenticated proofs
+│   ├── bridge.js             # HTTP API for browser control
+│   ├── proof-extension/      # Chrome extension for capture
+│   └── docker-compose.yml    # Container orchestration
+│
 ├── contracts/                # On-chain verification
 │   ├── src/
 │   │   ├── ISigstoreVerifier.sol   # Interface
@@ -177,14 +219,13 @@ contract MyApp {
 │   │   └── HonkVerifier.sol        # Generated verifier
 │   └── examples/
 │       ├── GitHubFaucet.sol        # Faucet demo
-│       └── SimpleEscrow.sol        # Bounty pattern
+│       ├── SimpleEscrow.sol        # Basic bounty
+│       └── SelfJudgingEscrow.sol   # AI-judged bounty
 │
 ├── workflow-templates/       # Ready-to-fork workflows
 │   ├── github-identity.yml   # Prove GitHub account
 │   ├── tweet-capture.yml     # Prove tweet authorship
 │   └── file-hash.yml         # Prove file contents
-│
-├── browser-container/        # Headless Chrome for login proofs
 │
 └── docs/
     ├── faucet.md             # Faucet demo walkthrough
