@@ -29,7 +29,7 @@ on:
       faucet_address:
         description: 'Faucet contract address (Base Sepolia)'
         required: true
-        default: '0xcfb53ce24F4B5CfA3c4a70F559F60e84C96bf863'
+        default: '0x5E27C06fb70e9365a6C2278298833CBd2b2d9793'
 
 permissions:
   id-token: write
