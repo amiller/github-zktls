@@ -49,14 +49,14 @@ Claim Base Sepolia testnet ETH by proving you have a GitHub account.
    - Click "Run workflow" — takes ~5 min
 4. **Download the artifact** — Click the completed run → download `identity-proof`
 5. **Claim your ETH:**
-   - **No gas?** [Open an issue](https://github.com/anthropics/github-zktls/issues/new) titled `[CLAIM]` and paste the contents of `claim.json`. We'll relay it for you.
+   - **No gas?** [Open an issue](https://github.com/amiller/github-zktls/issues/new) titled `[CLAIM]` and paste the contents of `claim.json` in a ```json code block. We'll relay it for you.
    - **Have gas?** Submit directly with `cast send` (see below)
 
 ### Option B: Command Line
 
 ```bash
 # Fork and clone
-gh repo fork anthropics/github-zktls --clone
+gh repo fork amiller/github-zktls --clone
 cd github-zktls
 
 # Run the workflow (proof generated in Actions)
@@ -66,11 +66,16 @@ gh workflow run github-identity.yml -f recipient_address=0xYOUR_ADDRESS
 gh run watch
 gh run download -n identity-proof
 
-# Submit (or open an issue with claim.json for gasless)
+# Submit via issue (gasless) - paste claim.json in a ```json code block
+# Or submit directly if you have gas:
+CLAIM=$(cat identity-proof/claim.json)
 cast send 0xf31768d4E42d5e80aE95415309D7908ae730Fb41 \
   "claim(bytes,bytes32[],bytes,string,address)" \
-  "$(cat identity-proof/proof.hex)" "$(cat identity-proof/inputs.json)" \
-  "$(cat identity-proof/certificate.json)" "YOUR_GITHUB_USERNAME" 0xYOUR_ADDRESS \
+  $(echo "$CLAIM" | jq -r '.proof') \
+  $(echo "$CLAIM" | jq -c '.inputs') \
+  $(echo "$CLAIM" | jq -r '.certificate | @json') \
+  $(echo "$CLAIM" | jq -r '.username') \
+  $(echo "$CLAIM" | jq -r '.recipient') \
   --rpc-url https://sepolia.base.org --private-key $YOUR_KEY
 ```
 
@@ -110,11 +115,10 @@ Fetching the workflow at that commit SHA tells you exactly what executed. No cer
 | Template | Proves | Uses Browser |
 |----------|--------|--------------|
 | `github-identity.yml` | GitHub account ownership | No |
-| `twitter-proof.yml` | Twitter account ownership | Yes |
 | `tweet-capture.yml` | Tweet authorship | Yes |
-| `github-contributions.yml` | Contribution graph | Yes |
+| `file-hash.yml` | File contents at commit | No |
 
-See [`workflow-templates/`](workflow-templates/) and [`examples/workflows/`](examples/workflows/) for more.
+See [`workflow-templates/`](workflow-templates/) for ready-to-use templates and [`examples/workflows/`](examples/workflows/) for more examples including Twitter profile, GitHub contributions, and PayPal balance proofs.
 
 ---
 
