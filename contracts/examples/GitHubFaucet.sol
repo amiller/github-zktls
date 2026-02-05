@@ -53,9 +53,9 @@ contract GitHubFaucet {
         // Verify certificate matches attested artifact
         if (sha256(certificate) != att.artifactHash) revert CertificateMismatch();
 
-        // Verify username appears in certificate as "github_actor":"<username>"
-        // We check for the exact pattern to prevent injection
-        bytes memory pattern = abi.encodePacked('"github_actor":"', username, '"');
+        // Verify username appears in certificate as "github_actor": "<username>"
+        // We check for the exact pattern to prevent injection (note space after colon for pretty JSON)
+        bytes memory pattern = abi.encodePacked('"github_actor": "', username, '"');
         if (!containsBytes(certificate, pattern)) revert UsernameMismatch();
 
         // Check commit requirement if set
