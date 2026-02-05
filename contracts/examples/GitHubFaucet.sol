@@ -5,18 +5,15 @@ import {ISigstoreVerifier} from "../src/ISigstoreVerifier.sol";
 
 /// @title GitHubFaucet
 /// @notice Testnet faucet that distributes ETH to unique GitHub users (one claim per day)
-/// @dev Verifies the certificate JSON matches the attested artifactHash, then rate-limits per username
 contract GitHubFaucet {
     ISigstoreVerifier public immutable verifier;
+    address public immutable owner;
 
     uint256 public constant COOLDOWN = 1 days;
     uint256 public constant MAX_CLAIM = 0.001 ether;
-    uint256 public constant RESERVE_DIVISOR = 20; // max 5% of reserves per claim
+    uint256 public constant RESERVE_DIVISOR = 20;
 
-    // keccak256(username) => last claim timestamp
     mapping(bytes32 => uint256) public lastClaim;
-
-    // Required workflow commit (set to 0 to accept any)
     bytes20 public requiredCommitSha;
 
     event Claimed(address indexed recipient, string indexed username, uint256 amount);
@@ -25,22 +22,26 @@ contract GitHubFaucet {
     error InvalidProof();
     error CertificateMismatch();
     error UsernameMismatch();
+    error RecipientMismatch();
     error WrongCommit();
     error AlreadyClaimedToday();
     error FaucetEmpty();
+    error NotOwner();
 
-    constructor(address _verifier) {
+    modifier onlyOwner() {
+        if (msg.sender != owner) revert NotOwner();
+        _;
+    }
+
+    constructor(address _verifier, bytes20 _requiredCommitSha) {
         verifier = ISigstoreVerifier(_verifier);
+        owner = msg.sender;
+        requiredCommitSha = _requiredCommitSha;
     }
 
     receive() external payable {}
 
     /// @notice Claim testnet ETH by proving GitHub identity
-    /// @param proof The ZK proof
-    /// @param publicInputs The public inputs (artifactHash, repoHash, commitSha)
-    /// @param certificate The raw certificate.json that was attested
-    /// @param username The GitHub username (must appear in certificate as "github_actor")
-    /// @param recipient Address to receive ETH
     function claim(
         bytes calldata proof,
         bytes32[] calldata publicInputs,
@@ -50,42 +51,38 @@ contract GitHubFaucet {
     ) external {
         ISigstoreVerifier.Attestation memory att = verifier.verifyAndDecode(proof, publicInputs);
 
-        // Verify certificate matches attested artifact
         if (sha256(certificate) != att.artifactHash) revert CertificateMismatch();
 
-        // Verify username appears in certificate as "github_actor": "<username>"
-        // We check for the exact pattern to prevent injection (note space after colon for pretty JSON)
-        bytes memory pattern = abi.encodePacked('"github_actor": "', username, '"');
-        if (!containsBytes(certificate, pattern)) revert UsernameMismatch();
+        bytes memory usernamePattern = abi.encodePacked('"github_actor": "', username, '"');
+        if (!containsBytes(certificate, usernamePattern)) revert UsernameMismatch();
 
-        // Check commit requirement if set
+        bytes memory recipientPattern = abi.encodePacked('"recipient_address": "', addressToHex(recipient), '"');
+        if (!containsBytes(certificate, recipientPattern)) revert RecipientMismatch();
+
         if (requiredCommitSha != bytes20(0) && att.commitSha != requiredCommitSha) {
             revert WrongCommit();
         }
 
-        // Rate limit per user (not per repo)
-        bytes32 userKey = keccak256(bytes(username));
+        bytes32 userKey = keccak256(bytes(toLower(username)));
         if (block.timestamp - lastClaim[userKey] < COOLDOWN) revert AlreadyClaimedToday();
         lastClaim[userKey] = block.timestamp;
 
-        // Calculate claim amount
         uint256 amount = address(this).balance / RESERVE_DIVISOR;
         if (amount > MAX_CLAIM) amount = MAX_CLAIM;
         if (amount == 0) revert FaucetEmpty();
 
         emit Claimed(recipient, username, amount);
-        recipient.transfer(amount);
+        (bool ok,) = recipient.call{value: amount}("");
+        require(ok, "Transfer failed");
     }
 
-    /// @notice Set required commit SHA (owner only for production)
-    function setRequirements(bytes20 _commitSha) external {
+    function setRequirements(bytes20 _commitSha) external onlyOwner {
         requiredCommitSha = _commitSha;
         emit RequirementsUpdated(_commitSha);
     }
 
-    /// @notice Check if a user can claim
     function canClaim(string calldata username) external view returns (bool, uint256 nextClaimTime) {
-        bytes32 userKey = keccak256(bytes(username));
+        bytes32 userKey = keccak256(bytes(toLower(username)));
         uint256 last = lastClaim[userKey];
         if (block.timestamp - last >= COOLDOWN) {
             return (true, 0);
@@ -93,13 +90,11 @@ contract GitHubFaucet {
         return (false, last + COOLDOWN);
     }
 
-    /// @notice Get current claim amount
     function claimAmount() external view returns (uint256) {
         uint256 amount = address(this).balance / RESERVE_DIVISOR;
         return amount > MAX_CLAIM ? MAX_CLAIM : amount;
     }
 
-    /// @dev Check if haystack contains needle
     function containsBytes(bytes calldata haystack, bytes memory needle) internal pure returns (bool) {
         if (needle.length > haystack.length) return false;
         uint256 end = haystack.length - needle.length + 1;
@@ -114,5 +109,31 @@ contract GitHubFaucet {
             if (found) return true;
         }
         return false;
+    }
+
+    function toLower(string calldata s) internal pure returns (string memory) {
+        bytes memory b = bytes(s);
+        bytes memory lower = new bytes(b.length);
+        for (uint256 i = 0; i < b.length; i++) {
+            if (b[i] >= 0x41 && b[i] <= 0x5A) {
+                lower[i] = bytes1(uint8(b[i]) + 32);
+            } else {
+                lower[i] = b[i];
+            }
+        }
+        return string(lower);
+    }
+
+    function addressToHex(address a) internal pure returns (string memory) {
+        bytes memory alphabet = "0123456789abcdef";
+        bytes memory result = new bytes(42);
+        result[0] = "0";
+        result[1] = "x";
+        uint160 value = uint160(a);
+        for (uint256 i = 41; i > 1; i--) {
+            result[i] = alphabet[value & 0xf];
+            value >>= 4;
+        }
+        return string(result);
     }
 }
