@@ -56,13 +56,15 @@ jobs:
       - name: Generate identity certificate
         run: |
           mkdir -p proof
+          RECIPIENT=$(echo "${{ inputs.recipient_address }}" | tr '[:upper:]' '[:lower:]')
+          FAUCET=$(echo "${{ inputs.faucet_address }}" | tr '[:upper:]' '[:lower:]')
           cat > proof/certificate.json << EOF
           {
             "type": "github-identity",
             "github_actor": "${{ github.actor }}",
             "github_repository": "${{ github.repository }}",
-            "recipient_address": "${{ inputs.recipient_address }}",
-            "faucet_address": "${{ inputs.faucet_address }}",
+            "recipient_address": "$RECIPIENT",
+            "faucet_address": "$FAUCET",
             "chain_id": 84532,
             "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
             "workflow_run": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

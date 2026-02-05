@@ -126,6 +126,7 @@ jobs:
           AUTHOR_NAME=$(jq -r '.author_name' proof/oembed.json)
           TWEET_HTML=$(jq -r '.html' proof/oembed.json)
           TWEET_TEXT=$(echo "$TWEET_HTML" | sed 's/<[^>]*>//g' | sed 's/&mdash;/—/g' | head -c 1000)
+          RECIPIENT=$(echo "${{ inputs.recipient_address }}" | tr '[:upper:]' '[:lower:]')
 
           cat > proof/certificate.json << EOF
           {
@@ -134,7 +135,7 @@ jobs:
             "tweet_text": $(echo "$TWEET_TEXT" | jq -Rs .),
             "author_handle": "$AUTHOR_HANDLE",
             "author_name": "$AUTHOR_NAME",
-            "recipient_address": "${{ inputs.recipient_address }}",
+            "recipient_address": "$RECIPIENT",
             "logged_in_verified": true,
             "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
             "github_run_id": "${{ github.run_id }}",

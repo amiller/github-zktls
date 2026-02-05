@@ -106,6 +106,8 @@ jobs:
       - name: Generate certificate
         run: |
           mkdir -p proof
+          RECIPIENT=$(echo "${{ inputs.recipient_address }}" | tr '[:upper:]' '[:lower:]')
+          ESCROW=$(echo "${{ inputs.escrow_address }}" | tr '[:upper:]' '[:lower:]')
           cat > proof/certificate.json << EOF
           {
             "type": "bounty-claim",
@@ -114,8 +116,8 @@ jobs:
             "reason": "${{ env.REASON }}",
             "github_actor": "${{ github.actor }}",
             "github_repository": "${{ github.repository }}",
-            "recipient_address": "${{ inputs.recipient_address }}",
-            "escrow_address": "${{ inputs.escrow_address }}",
+            "recipient_address": "$RECIPIENT",
+            "escrow_address": "$ESCROW",
             "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
             "workflow_run": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           }
