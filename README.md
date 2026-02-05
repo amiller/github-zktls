@@ -33,6 +33,10 @@ For on-chain verification, attestations are too verbose. Enter ZK:
 
 ## Try It: Testnet Faucet
 
+![Claims](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Familler%2Fgithub-zktls%2Fmaster%2Fexamples%2Fleaderboard%2Fclaims.json&query=%24.stats.totalClaims&label=Claims&color=blue)
+![Users](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Familler%2Fgithub-zktls%2Fmaster%2Fexamples%2Fleaderboard%2Fclaims.json&query=%24.stats.uniqueUsers&label=Users&color=green)
+![ETH](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Familler%2Fgithub-zktls%2Fmaster%2Fexamples%2Fleaderboard%2Fclaims.json&query=%24.stats.totalEth&label=ETH%20Distributed&color=purple)
+
 Claim testnet ETH by proving you have a GitHub account.
 
 ### Option A: GitHub Web UI (easiest)
@@ -41,31 +45,40 @@ Claim testnet ETH by proving you have a GitHub account.
 2. **Go to Actions** — In your fork, click the "Actions" tab
 3. **Run the workflow** — Click "GitHub Identity" → "Run workflow"
    - Enter your ETH address (see below if you need one)
-   - Click "Run workflow"
-   - The workflow generates a Sigstore attestation, then creates a ZK proof of the attestation
-4. **Claim your ETH:**
-   - **If you have gas:** Download the `identity-proof` artifact, then submit the transaction using `proof/claim.json`
-   - **No gas?** [Open an issue on our repo](https://github.com/anthropics/github-zktls/issues/new) titled `[CLAIM]` and paste your `proof/claim.json`. We'll relay it for you.
+   - Leave "Generate ZK proof" checked (default)
+   - Click "Run workflow" — takes ~5 min
+4. **Download the artifact** — Click the completed run → download `identity-proof`
+5. **Claim your ETH:**
+   - **No gas?** [Open an issue](https://github.com/anthropics/github-zktls/issues/new) titled `[CLAIM]` and paste the contents of `claim.json`. We'll relay it for you.
+   - **Have gas?** Submit directly with `cast send` (see below)
 
 ### Option B: Command Line
 
 ```bash
-# 1. Fork and clone
-gh repo fork --clone
+# Fork and clone
+gh repo fork anthropics/github-zktls --clone
+cd github-zktls
 
-# 2. Run the identity workflow
+# Run the workflow (proof generated in Actions)
 gh workflow run github-identity.yml -f recipient_address=0xYOUR_ADDRESS
 
-# 3. Download attestation + generate proof
-gh run download $(gh run list -L1 --json databaseId -q '.[0].databaseId') -n identity-proof
-docker run --rm -v $(pwd):/work ghcr.io/amiller/zkproof generate /work/bundle.json /work/proof
+# Wait for completion, then download
+gh run watch
+gh run download -n identity-proof
 
-# 4. Submit (or open an issue with proof/claim.json for gasless)
-cast send 0x5E27C06fb70e9365a6C2278298833CBd2b2d9793 \
+# Submit (or open an issue with claim.json for gasless)
+cast send 0xcfb53ce24F4B5CfA3c4a70F559F60e84C96bf863 \
   "claim(bytes,bytes32[],bytes,string,address)" \
-  "$(cat proof/proof.hex)" "$(cat proof/inputs.json)" \
+  "$(cat identity-proof/proof.hex)" "$(cat identity-proof/inputs.json)" \
   "$(cat identity-proof/certificate.json)" "YOUR_GITHUB_USERNAME" 0xYOUR_ADDRESS \
   --rpc-url https://sepolia.base.org --private-key $YOUR_KEY
+```
+
+**Prefer local proof generation?** Uncheck "Generate ZK proof" when running the workflow, then:
+
+```bash
+gh run download -n identity-proof
+docker run --rm -v $(pwd)/identity-proof:/work ghcr.io/amiller/zkproof generate /work/bundle.json /work
 ```
 
 ### Need an ETH address?
@@ -261,22 +274,21 @@ See [docs/trust-model.md](docs/trust-model.md) for details.
 ### Generate a Proof
 
 ```bash
-# 1. Run workflow in your fork
+# Run workflow in your fork (proof generated automatically)
 gh workflow run github-identity.yml -f recipient_address=0xYOUR_ADDRESS
 
-# 2. Download attestation
-gh run download RUN_ID -n identity-proof
-
-# 3. Generate proof
-docker run --rm -v $(pwd):/work ghcr.io/amiller/zkproof generate /work/bundle.json /work/proof
+# Wait and download
+gh run watch && gh run download -n identity-proof
 ```
+
+The artifact contains `claim.json` ready for submission.
 
 ### Verify On-Chain
 
 ```bash
 cast call 0x0Af922925AE3602b0dC23c4cFCf54FABe2F54725 \
   "verifyAndDecode(bytes,bytes32[])" \
-  "$(cat proof/proof.hex)" "$(cat proof/inputs.json)" \
+  "$(cat identity-proof/proof.hex)" "$(cat identity-proof/inputs.json)" \
   --rpc-url https://sepolia.base.org
 ```
 

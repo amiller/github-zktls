@@ -1,66 +1,136 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Proof Leaderboard</title>
+  <title>GitHub ZK Faucet Leaderboard</title>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     * { box-sizing: border-box; }
-    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background: #0d1117; color: #c9d1d9; }
-    h1 { color: #58a6ff; margin-bottom: 10px; }
+    body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 0 auto; padding: 20px; background: #0d1117; color: #c9d1d9; }
+    h1 { color: #58a6ff; margin-bottom: 5px; }
     .subtitle { color: #8b949e; margin-bottom: 30px; }
-    .proof { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; margin-bottom: 12px; }
-    .proof-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-    .proof-type { background: #238636; color: #fff; padding: 4px 10px; border-radius: 20px; font-size: 13px; font-weight: 500; }
-    .proof-claim { font-size: 18px; font-weight: 600; color: #f0f6fc; }
-    .proof-meta { font-size: 13px; color: #8b949e; }
-    .proof-meta a { color: #58a6ff; text-decoration: none; }
-    .proof-meta a:hover { text-decoration: underline; }
-    .empty { text-align: center; padding: 60px; color: #8b949e; }
-    .stats { display: flex; gap: 20px; margin-bottom: 30px; }
-    .stat { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px 24px; }
-    .stat-value { font-size: 32px; font-weight: 700; color: #58a6ff; }
+    .stats { display: flex; gap: 16px; margin-bottom: 30px; flex-wrap: wrap; }
+    .stat { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px 24px; min-width: 140px; }
+    .stat-value { font-size: 28px; font-weight: 700; color: #58a6ff; }
     .stat-label { font-size: 13px; color: #8b949e; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+    .tab { background: #21262d; border: 1px solid #30363d; border-radius: 6px; padding: 8px 16px; cursor: pointer; color: #c9d1d9; }
+    .tab.active { background: #238636; border-color: #238636; }
+    .section { display: none; }
+    .section.active { display: block; }
+    table { width: 100%; border-collapse: collapse; background: #161b22; border-radius: 8px; overflow: hidden; }
+    th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #30363d; }
+    th { background: #21262d; color: #8b949e; font-weight: 500; font-size: 13px; }
+    .rank { color: #8b949e; width: 50px; }
+    .rank-1 { color: #ffd700; font-weight: 700; }
+    .rank-2 { color: #c0c0c0; font-weight: 600; }
+    .rank-3 { color: #cd7f32; font-weight: 600; }
+    .username { font-weight: 600; color: #f0f6fc; }
+    .username a { color: inherit; text-decoration: none; }
+    .username a:hover { color: #58a6ff; }
+    .amount { font-family: monospace; color: #7ee787; }
+    .tx-link { color: #58a6ff; text-decoration: none; font-family: monospace; font-size: 13px; }
+    .tx-link:hover { text-decoration: underline; }
+    .time { color: #8b949e; font-size: 13px; }
+    .empty { text-align: center; padding: 60px; color: #8b949e; }
+    .updated { text-align: center; color: #484f58; font-size: 12px; margin-top: 30px; }
   </style>
 </head>
 <body>
-  <h1>Proof Leaderboard</h1>
-  <p class="subtitle">Verified proofs submitted via GitHub Actions</p>
+  <h1>🏆 GitHub ZK Faucet</h1>
+  <p class="subtitle">Prove your GitHub identity with ZK proofs to claim testnet ETH</p>
 
   <div class="stats" id="stats"></div>
-  <div id="proofs"></div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="leaderboard">Leaderboard</div>
+    <div class="tab" data-tab="recent">Recent Claims</div>
+  </div>
+
+  <div id="leaderboard" class="section active"></div>
+  <div id="recent" class="section"></div>
+  <div id="updated" class="updated"></div>
 
   <script>
     async function load() {
-      const res = await fetch('proofs.json')
-      const proofs = await res.json()
-
-      if (proofs.length === 0) {
-        document.getElementById('proofs').innerHTML = '<div class="empty">No proofs submitted yet. Be the first!</div>'
+      let data
+      try {
+        const res = await fetch('claims.json')
+        data = await res.json()
+      } catch {
+        document.getElementById('leaderboard').innerHTML = '<div class="empty">No data yet. Run the workflow to fetch claims.</div>'
         return
       }
 
-      const types = [...new Set(proofs.map(p => p.proof_type))]
+      const { claims, leaderboard, stats, updatedAt } = data
+
+      // Stats
       document.getElementById('stats').innerHTML = `
-        <div class="stat"><div class="stat-value">${proofs.length}</div><div class="stat-label">Total Proofs</div></div>
-        <div class="stat"><div class="stat-value">${types.length}</div><div class="stat-label">Proof Types</div></div>
+        <div class="stat"><div class="stat-value">${stats.totalClaims}</div><div class="stat-label">Total Claims</div></div>
+        <div class="stat"><div class="stat-value">${stats.uniqueUsers}</div><div class="stat-label">Unique Users</div></div>
+        <div class="stat"><div class="stat-value">${parseFloat(stats.totalEth).toFixed(4)}</div><div class="stat-label">ETH Distributed</div></div>
       `
 
-      const sorted = proofs.slice().reverse()
-      document.getElementById('proofs').innerHTML = sorted.map(p => `
-        <div class="proof">
-          <div class="proof-header">
-            <span class="proof-type">${p.proof_type}</span>
-            <span class="proof-claim">${p.claim}</span>
-          </div>
-          <div class="proof-meta">
-            Submitted by <a href="https://github.com/${p.submitted_by}">${p.submitted_by}</a>
-            &middot; <a href="${p.run_url}">View proof run</a>
-            &middot; ${new Date(p.submitted_at).toLocaleDateString()}
-          </div>
-        </div>
-      `).join('')
+      // Leaderboard
+      if (leaderboard.length === 0) {
+        document.getElementById('leaderboard').innerHTML = '<div class="empty">No claims yet. Be the first!</div>'
+      } else {
+        document.getElementById('leaderboard').innerHTML = `
+          <table>
+            <tr><th>Rank</th><th>User</th><th>Claims</th><th>Total ETH</th></tr>
+            ${leaderboard.map((u, i) => `
+              <tr>
+                <td class="rank ${i < 3 ? 'rank-' + (i + 1) : ''}">#${i + 1}</td>
+                <td class="username"><a href="https://github.com/${u.username}" target="_blank">${u.username}</a></td>
+                <td>${u.claims}</td>
+                <td class="amount">${parseFloat(u.totalEth).toFixed(6)}</td>
+              </tr>
+            `).join('')}
+          </table>
+        `
+      }
+
+      // Recent claims
+      if (claims.length === 0) {
+        document.getElementById('recent').innerHTML = '<div class="empty">No claims yet.</div>'
+      } else {
+        document.getElementById('recent').innerHTML = `
+          <table>
+            <tr><th>User</th><th>Amount</th><th>Transaction</th><th>Time</th></tr>
+            ${claims.map(c => `
+              <tr>
+                <td class="username"><a href="https://github.com/${c.username}" target="_blank">${c.username}</a></td>
+                <td class="amount">${parseFloat(c.amountEth).toFixed(6)} ETH</td>
+                <td><a class="tx-link" href="https://sepolia.basescan.org/tx/${c.txHash}" target="_blank">${c.txHash.slice(0, 10)}...</a></td>
+                <td class="time">${timeAgo(c.timestamp)}</td>
+              </tr>
+            `).join('')}
+          </table>
+        `
+      }
+
+      document.getElementById('updated').textContent = `Last updated: ${new Date(updatedAt).toLocaleString()}`
     }
+
+    function timeAgo(ts) {
+      const diff = Date.now() - new Date(ts).getTime()
+      const mins = Math.floor(diff / 60000)
+      if (mins < 60) return `${mins}m ago`
+      const hrs = Math.floor(mins / 60)
+      if (hrs < 24) return `${hrs}h ago`
+      const days = Math.floor(hrs / 24)
+      return `${days}d ago`
+    }
+
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.onclick = () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'))
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'))
+        tab.classList.add('active')
+        document.getElementById(tab.dataset.tab).classList.add('active')
+      }
+    })
+
     load()
   </script>
 </body>

@@ -1,0 +1,27 @@
+{
+  "claims": [
+    {
+      "username": "amiller",
+      "recipient": "0x5a370b73385085091de23e0fd21b54f2724ead8d",
+      "amount": "5000000000000",
+      "amountEth": "0.000005",
+      "txHash": "0x5ec147e09204cb48db8fa26d2ab073ef50a0195b4387315a2d108ad9e3282463",
+      "timestamp": "2026-02-05T00:07:40.000Z",
+      "block": "37240886"
+    }
+  ],
+  "leaderboard": [
+    {
+      "username": "amiller",
+      "claims": 1,
+      "totalWei": "5000000000000",
+      "totalEth": "0.000005"
+    }
+  ],
+  "stats": {
+    "totalClaims": 1,
+    "uniqueUsers": 1,
+    "totalEth": "0.000005"
+  },
+  "updatedAt": "2026-02-05T01:55:08.518Z"
+}

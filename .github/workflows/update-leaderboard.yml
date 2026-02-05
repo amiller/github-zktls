@@ -1,0 +1,43 @@
+# Leaderboard Updater
+#
+# Fetches recent faucet claims from Basescan and updates the leaderboard.
+# Runs every 6 hours and on push to keep data fresh.
+
+name: Update Leaderboard
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/update-leaderboard.yml'
+      - 'scripts/update-leaderboard.js'
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Fetch claims and update leaderboard
+        env:
+          BASESCAN_API_KEY: ${{ secrets.BASESCAN_API_KEY }}
+          FAUCET_ADDRESS: '0x5E27C06fb70e9365a6C2278298833CBd2b2d9793'
+        run: node scripts/update-leaderboard.js
+
+      - name: Commit changes
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add examples/leaderboard/claims.json
+          git diff --staged --quiet || git commit -m "Update leaderboard [skip ci]"
+          git push
