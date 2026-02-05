@@ -1,16 +1,37 @@
 # Plan: Attested VK Generation
 
-## Goal
+## Status: ABANDONED
+
+**Reason**: UltraHonk uses a universal trusted setup (Powers of Tau), not per-circuit ceremonies. VK generation is **deterministic** - same circuit + tooling = same VK.
+
+Sigstore attestation adds no value here. Verification is simply: recompile with same versions, compare output.
+
+---
+
+## Original Goal (for reference)
 
 Make the trusted setup (VK generation) auditable via GitHub Actions + Sigstore attestation. Anyone can verify that the on-chain verifier was generated from a specific circuit at a specific commit.
 
-## Current Problem
+## Why This Was Unnecessary
 
-1. VK is generated during Docker build - opaque, not auditable
-2. No proof that deployed HonkVerifier.sol matches the circuit source
-3. Users must trust that we ran `bb write_vk` honestly
+1. VK generation is deterministic, not a "trusted setup"
+2. Anyone can verify by recompiling: `nargo compile && bb write_vk && bb write_solidity_verifier`
+3. Reproducibility IS the trust model - no attestation needed
 
-## Proposed Solution
+## Simpler Verification Story
+
+```bash
+# Clone repo, install nargo 1.0.0-beta.17 and bb v3.0.3
+cd zk-proof/circuits
+nargo compile
+bb write_vk -b target/zk_github_attestation.json -o target/vk -t evm
+bb write_solidity_verifier -k target/vk/vk -o HonkVerifier.sol -t evm
+# Compare HonkVerifier.sol to deployed contract source
+```
+
+---
+
+## Original Proposed Solution (archived)
 
 ### GitHub Action: `generate-vk.yml`
 
@@ -60,9 +81,9 @@ This creates a binding: anyone can verify the contract code matches the attested
 ## Implementation Steps
 
 1. [x] Create `generate-vk.yml` workflow
-2. [x] Add `bb write_contract` to generate Solidity
+2. [x] Add `bb write_solidity_verifier` to generate Solidity
 3. [x] Create attestation subject JSON
-4. [ ] Test attestation flow
+4. [x] Test attestation flow - https://github.com/amiller/github-zktls/attestations/18208021
 5. [ ] Update README with verification instructions
 6. [ ] (Optional) Add VK_HASH constant to contract
 
