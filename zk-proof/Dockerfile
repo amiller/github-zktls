@@ -81,9 +81,10 @@ case "$1" in
     xxd -p -c 99999 target/proof/proof > "$OUTPUT/proof.hex"
 
     # Format public inputs as bytes32 array + claim JSON
-    RECIPIENT="${RECIPIENT:-}"
     node -e "
       const fs = require('fs');
+      const path = require('path');
+
       const raw = fs.readFileSync('target/proof/public_inputs');
       const proof = '0x' + fs.readFileSync('$OUTPUT/proof.hex', 'utf8').trim();
       const inputs = [];
@@ -92,14 +93,53 @@ case "$1" in
       }
       fs.writeFileSync('$OUTPUT/inputs.json', JSON.stringify(inputs, null, 2));
 
+      // Extract certificate from bundle
+      const bundle = JSON.parse(fs.readFileSync('$BUNDLE', 'utf8'));
+      const actualBundle = bundle.attestations?.[0]?.bundle || bundle;
+      const payload = JSON.parse(Buffer.from(actualBundle.dsseEnvelope.payload, 'base64').toString());
+      const artifactName = payload.subject?.[0]?.name || '';
+
+      // Find and read the certificate file (preserving exact bytes including trailing newline)
+      const bundleDir = path.dirname('$BUNDLE');
+      let certPath = path.join(bundleDir, artifactName);
+      if (!fs.existsSync(certPath)) {
+        // Try without leading directory
+        certPath = path.join(bundleDir, path.basename(artifactName));
+      }
+
+      let certificate = '';
+      let username = '';
+      let recipient = '';
+      let faucet = '';
+
+      if (fs.existsSync(certPath)) {
+        // Read as raw string to preserve trailing newline
+        certificate = fs.readFileSync(certPath, 'utf8');
+        try {
+          const certJson = JSON.parse(certificate);
+          username = certJson.github_actor || '';
+          recipient = certJson.recipient_address || '';
+          faucet = certJson.faucet_address || '';
+        } catch (e) {
+          console.warn('Warning: Could not parse certificate JSON');
+        }
+      } else {
+        console.warn('Warning: Certificate file not found at', certPath);
+        console.warn('You will need to add certificate, username, recipient, faucet fields manually');
+      }
+
       // Generate claim JSON ready for GitHub issue
       const claim = {
         proof,
         inputs,
-        recipient: process.env.RECIPIENT || '0x_YOUR_ADDRESS_HERE'
+        certificate,
+        username,
+        recipient,
+        faucet
       };
       fs.writeFileSync('$OUTPUT/claim.json', JSON.stringify(claim, null, 2));
       console.log('Public inputs:', inputs.length, 'elements');
+      if (certificate) console.log('Certificate:', certificate.length, 'bytes');
     "
 
     echo ""
@@ -110,8 +150,7 @@ case "$1" in
     echo "    $OUTPUT/inputs.json  - Public inputs array"
     echo "    $OUTPUT/claim.json   - Ready for GitHub issue submission"
     echo ""
-    echo "To claim, open an issue at the repo with title '[CLAIM] Faucet request'"
-    echo "and paste the contents of claim.json in a \`\`\`json code block."
+    echo "To claim, open an issue with title '[CLAIM]' and paste claim.json in a json code block."
     ;;
 
   verify)
