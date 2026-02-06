@@ -176,4 +176,37 @@ contract EmailNFTTest is Test {
         assertTrue(nft.supportsInterface(0x01ffc9a7)); // ERC165
         assertFalse(nft.supportsInterface(0xdeadbeef));
     }
+
+    function test_TokenURIReturnsSvg() public {
+        bytes memory cert = bytes(
+            '{"email": "alice@example.com", "recipient_address": "0x1111111111111111111111111111111111111111"}'
+        );
+        mock.setAttestation(sha256(cert), bytes32(0), bytes20(0));
+        nft.claim("", new bytes32[](0), cert, "alice@example.com", alice);
+
+        uint256 tokenId = uint256(keccak256(bytes("alice@example.com")));
+        string memory uri = nft.tokenURI(tokenId);
+        assertTrue(bytes(uri).length > 0);
+        // Should be a data URI
+        bytes memory prefix = bytes("data:application/json;base64,");
+        for (uint256 i = 0; i < prefix.length; i++) {
+            assertEq(bytes(uri)[i], prefix[i]);
+        }
+    }
+
+    function test_TokenURIStoresLowercaseEmail() public {
+        bytes memory cert = bytes(
+            '{"email": "Bob@Example.COM", "recipient_address": "0x2222222222222222222222222222222222222222"}'
+        );
+        mock.setAttestation(sha256(cert), bytes32(0), bytes20(0));
+        nft.claim("", new bytes32[](0), cert, "Bob@Example.COM", bob);
+
+        uint256 tokenId = uint256(keccak256(bytes("bob@example.com")));
+        assertEq(nft.emailOf(tokenId), "bob@example.com");
+    }
+
+    function test_TokenURIRevertsForNonexistent() public {
+        vm.expectRevert(EmailNFT.InvalidRecipient.selector);
+        nft.tokenURI(12345);
+    }
 }

@@ -17,6 +17,7 @@ contract EmailNFT {
     mapping(uint256 => address) public getApproved;
     mapping(address => mapping(address => bool)) public isApprovedForAll;
     mapping(bytes32 => bool) public claimed;
+    mapping(uint256 => string) public emailOf;
 
     bytes20 public requiredCommitSha;
     uint256 public totalSupply;
@@ -73,6 +74,7 @@ contract EmailNFT {
         claimed[emailKey] = true;
 
         uint256 tokenId = uint256(emailKey);
+        emailOf[tokenId] = toLower(email);
         _mint(recipient, tokenId);
         totalSupply++;
 
@@ -86,6 +88,28 @@ contract EmailNFT {
 
     function isClaimed(string calldata email) external view returns (bool) {
         return claimed[keccak256(bytes(toLower(email)))];
+    }
+
+    function tokenURI(uint256 tokenId) external view returns (string memory) {
+        if (ownerOf[tokenId] == address(0)) revert InvalidRecipient();
+        string memory email = emailOf[tokenId];
+        string memory svg = string(abi.encodePacked(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="250" viewBox="0 0 400 250">'
+            '<defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">'
+            '<stop offset="0%" style="stop-color:#1a1a2e"/><stop offset="100%" style="stop-color:#16213e"/></linearGradient></defs>'
+            '<rect width="400" height="250" rx="16" fill="url(#g)"/>'
+            '<text x="24" y="40" fill="#4ecca3" font-family="monospace" font-size="12" opacity="0.7">VERIFIED EMAIL</text>'
+            '<text x="24" y="80" fill="#fff" font-family="monospace" font-size="18" font-weight="bold">',
+            _escapeXml(email),
+            '</text>'
+            '<circle cx="24" cy="210" r="6" fill="#4ecca3"/><text x="38" y="215" fill="#4ecca3" font-family="monospace" font-size="12">on-chain</text>'
+            '<text x="376" y="236" fill="#555" font-family="monospace" font-size="10" text-anchor="end">Email Identity NFT</text>'
+            '</svg>'
+        ));
+        string memory json = string(abi.encodePacked(
+            '{"name":"', _escapeJson(email), '","description":"Verified email identity","image":"data:image/svg+xml;base64,', _base64(bytes(svg)), '"}'
+        ));
+        return string(abi.encodePacked("data:application/json;base64,", _base64(bytes(json))));
     }
 
     // --- Minimal ERC-721 ---
@@ -167,6 +191,66 @@ contract EmailNFT {
         for (uint256 i = 41; i > 1; i--) {
             result[i] = alphabet[value & 0xf];
             value >>= 4;
+        }
+        return string(result);
+    }
+
+    function _escapeXml(string memory s) internal pure returns (string memory) {
+        bytes memory b = bytes(s);
+        bytes memory out = new bytes(b.length * 5);
+        uint256 len;
+        for (uint256 i = 0; i < b.length; i++) {
+            if (b[i] == "<") { out[len++] = "&"; out[len++] = "l"; out[len++] = "t"; out[len++] = ";"; }
+            else if (b[i] == ">") { out[len++] = "&"; out[len++] = "g"; out[len++] = "t"; out[len++] = ";"; }
+            else if (b[i] == "&") { out[len++] = "&"; out[len++] = "a"; out[len++] = "m"; out[len++] = "p"; out[len++] = ";"; }
+            else if (b[i] == '"') { out[len++] = "&"; out[len++] = "q"; out[len++] = "u"; out[len++] = "o"; out[len++] = "t"; out[len++] = ";"; }
+            else out[len++] = b[i];
+        }
+        bytes memory trimmed = new bytes(len);
+        for (uint256 i = 0; i < len; i++) trimmed[i] = out[i];
+        return string(trimmed);
+    }
+
+    function _escapeJson(string memory s) internal pure returns (string memory) {
+        bytes memory b = bytes(s);
+        bytes memory out = new bytes(b.length * 2);
+        uint256 len;
+        for (uint256 i = 0; i < b.length; i++) {
+            if (b[i] == '"' || b[i] == "\\") { out[len++] = "\\"; }
+            out[len++] = b[i];
+        }
+        bytes memory trimmed = new bytes(len);
+        for (uint256 i = 0; i < len; i++) trimmed[i] = out[i];
+        return string(trimmed);
+    }
+
+    bytes internal constant B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+    function _base64(bytes memory data) internal pure returns (string memory) {
+        if (data.length == 0) return "";
+        uint256 outLen = 4 * ((data.length + 2) / 3);
+        bytes memory result = new bytes(outLen);
+        uint256 i;
+        uint256 j;
+        for (i = 0; i + 2 < data.length; i += 3) {
+            uint256 v = (uint256(uint8(data[i])) << 16) | (uint256(uint8(data[i+1])) << 8) | uint256(uint8(data[i+2]));
+            result[j++] = B64[(v >> 18) & 0x3F];
+            result[j++] = B64[(v >> 12) & 0x3F];
+            result[j++] = B64[(v >> 6) & 0x3F];
+            result[j++] = B64[v & 0x3F];
+        }
+        if (data.length % 3 == 1) {
+            uint256 v = uint256(uint8(data[i])) << 16;
+            result[j++] = B64[(v >> 18) & 0x3F];
+            result[j++] = B64[(v >> 12) & 0x3F];
+            result[j++] = "=";
+            result[j++] = "=";
+        } else if (data.length % 3 == 2) {
+            uint256 v = (uint256(uint8(data[i])) << 16) | (uint256(uint8(data[i+1])) << 8);
+            result[j++] = B64[(v >> 18) & 0x3F];
+            result[j++] = B64[(v >> 12) & 0x3F];
+            result[j++] = B64[(v >> 6) & 0x3F];
+            result[j++] = "=";
         }
         return string(result);
     }
