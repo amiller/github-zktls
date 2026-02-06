@@ -69,8 +69,8 @@ jobs:
         id: challenge
         run: |
           # Generate random 6-digit code
-          CODE=$(openssl rand -hex 3 | tr 'a-f' 'A-F')
-          CODE=$(printf "%06d" $((16#$CODE % 1000000)))
+          HEX=$(openssl rand -hex 3)
+          CODE=$(python3 -c "print(f'{int(\"$HEX\", 16) % 1000000:06d}')")
           echo "code=$CODE" >> $GITHUB_OUTPUT
 
           # Hash for public commitment
@@ -84,14 +84,25 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
         run: |
-          aws ses send-email \
-            --from "${{ secrets.SES_FROM_EMAIL }}" \
-            --destination "ToAddresses=${{ steps.parse.outputs.email }}" \
-            --message "Subject={Data='Email Verification Challenge'},Body={Text={Data='Your verification code is: ${{ steps.challenge.outputs.code }}
+          FROM="${{ secrets.SES_FROM_EMAIL }}"
+          TO="${{ steps.parse.outputs.email }}"
+          CODE="${{ steps.challenge.outputs.code }}"
+
+          RAW_MSG="From: $FROM
+          To: $TO
+          Subject: Email Verification Challenge
+          Content-Type: text/plain; charset=UTF-8
+
+          Your verification code is: $CODE
 
           Enter this code as a comment on your GitHub issue to verify your email and claim your NFT.
 
-          This code expires in 1 hour.'}}"
+          This code expires in 1 hour."
+
+          B64_MSG=$(echo "$RAW_MSG" | base64 -w 0)
+          aws ses send-raw-email \
+            --raw-message "Data=$B64_MSG" \
+            --region "${{ secrets.AWS_REGION }}"
 
       - name: Comment on issue
         uses: actions/github-script@v7
