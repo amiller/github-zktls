@@ -1,42 +1,10 @@
 {
-  "claims": [
-    {
-      "username": "claw-tee-dah",
-      "recipient": "0x6c4f77a1c5e13806fad5477bc8aa98f319b66061",
-      "amount": "950000000000000",
-      "amountEth": "0.000950",
-      "txHash": "0xe80203ace7f6b96e64c539c5ba45e81cffab1c16b33862496e855beac65d195d",
-      "timestamp": "2026-02-05T20:35:28.000Z",
-      "block": "37277720"
-    },
-    {
-      "username": "amiller",
-      "recipient": "0x5a370b73385085091de23e0fd21b54f2724ead8d",
-      "amount": "1000000000000000",
-      "amountEth": "0.001000",
-      "txHash": "0x67dee7b710425d41fc3eb62226b611588e25c52c291f5bda62ae2d73dc2c72d8",
-      "timestamp": "2026-02-05T20:17:18.000Z",
-      "block": "37277175"
-    }
-  ],
-  "leaderboard": [
-    {
-      "username": "amiller",
-      "claims": 1,
-      "totalWei": "1000000000000000",
-      "totalEth": "0.001000"
-    },
-    {
-      "username": "claw-tee-dah",
-      "claims": 1,
-      "totalWei": "950000000000000",
-      "totalEth": "0.000950"
-    }
-  ],
+  "claims": [],
+  "leaderboard": [],
   "stats": {
-    "totalClaims": 2,
-    "uniqueUsers": 2,
-    "totalEth": "0.001950"
+    "totalClaims": 0,
+    "uniqueUsers": 0,
+    "totalEth": "0.000000"
   },
-  "updatedAt": "2026-02-06T12:04:58.997Z"
+  "updatedAt": "2026-02-06T17:04:50.628Z"
 }
