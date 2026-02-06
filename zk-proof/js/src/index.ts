@@ -360,9 +360,11 @@ export function generateCircuitInputs(bundleJson: any): CircuitInputs {
 
   // 5. Compute hashes
   const artifactHash = Buffer.from(statement.artifactHash, 'hex')
-  const repoName = Buffer.from(statement.repo)
+  // Use OIDC claim from certificate (not in-toto statement) to match what circuit verifies
+  const repoNameStr = oidcClaims.repository || statement.repo
+  const repoName = Buffer.from(repoNameStr)
   const repoNamePadded = padBuffer(repoName, MAX_REPO_LENGTH)
-  const repoHash = createHash('sha256').update(statement.repo).digest()
+  const repoHash = createHash('sha256').update(repoNameStr).digest()
   const commitSha = Buffer.from(statement.commit, 'hex')
 
   // 6. Find artifact hash offset
