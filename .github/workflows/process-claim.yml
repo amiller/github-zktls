@@ -87,7 +87,7 @@ jobs:
             core.setOutput('certificate', certHex);
             core.setOutput('username', claim.username);
             core.setOutput('recipient', claim.recipient);
-            core.setOutput('faucet', claim.faucet || '0xf31768d4E42d5e80aE95415309D7908ae730Fb41');
+            core.setOutput('faucet', claim.faucet || '0x72cd70d28284dD215257f73e1C5aD8e28847215B');
 
             console.log('Parsed claim:');
             console.log(`  Username: ${claim.username}`);

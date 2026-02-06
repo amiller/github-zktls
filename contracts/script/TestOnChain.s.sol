@@ -6,7 +6,7 @@ import {ISigstoreVerifier} from "../src/ISigstoreVerifier.sol";
 
 contract TestOnChain is Script {
     function run() external view {
-        ISigstoreVerifier verifier = ISigstoreVerifier(0x0Af922925AE3602b0dC23c4cFCf54FABe2F54725);
+        ISigstoreVerifier verifier = ISigstoreVerifier(0xbD08fd15E893094Ad3191fdA0276Ac880d0FA3e1);
 
         // Load proof and inputs
         bytes memory proof = vm.readFileBinary("test/proof.bin");

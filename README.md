@@ -43,10 +43,10 @@ Claim Base Sepolia testnet ETH by proving you have a GitHub account.
 
 1. **Fork this repo** — Click "Fork" at the top of this page
    - **Important:** Uncheck "Copy the master branch only" to include tags
-2. **Switch to the release tag** — In your fork, click the branch dropdown → "Tags" → select `v1.0.0`
+2. **Switch to the release tag** — In your fork, click the branch dropdown → "Tags" → select `v1.0.1`
 3. **Go to Actions** — Click the "Actions" tab
 4. **Run the workflow** — Click "GitHub Identity" → "Run workflow"
-   - **Important:** Select `v1.0.0` tag from the "Use workflow from" dropdown
+   - **Important:** Select `v1.0.1` tag from the "Use workflow from" dropdown
    - Enter your ETH address (see below if you need one)
    - Leave "Generate ZK proof" checked (default)
    - Click "Run workflow" — takes ~5 min
@@ -55,7 +55,7 @@ Claim Base Sepolia testnet ETH by proving you have a GitHub account.
    - **No gas?** [Open an issue](https://github.com/amiller/github-zktls/issues/new) titled `[CLAIM]` and paste the contents of `claim.json` in a ```json code block. We'll relay it for you.
    - **Have gas?** Submit directly with `cast send` (see below)
 
-> **Why the tag?** The faucet contract verifies the exact commit SHA that produced your proof. Running from `v1.0.0` ensures your proof matches the expected commit.
+> **Why the tag?** The faucet contract verifies the exact commit SHA that produced your proof. Running from `v1.0.1` ensures your proof matches the expected commit.
 
 ### Option B: Command Line
 
@@ -65,10 +65,10 @@ gh repo fork amiller/github-zktls --clone
 cd github-zktls
 
 # Switch to the release tag
-git checkout v1.0.0
+git checkout v1.0.1
 
 # Run the workflow from the tag (proof generated in Actions)
-gh workflow run github-identity.yml --ref v1.0.0 -f recipient_address=0xYOUR_ADDRESS
+gh workflow run github-identity.yml --ref v1.0.1 -f recipient_address=0xYOUR_ADDRESS
 
 # Wait for completion, then download
 gh run watch
@@ -77,7 +77,7 @@ gh run download -n identity-proof
 # Submit via issue (gasless) - paste claim.json in a ```json code block
 # Or submit directly if you have gas:
 CLAIM=$(cat identity-proof/claim.json)
-cast send 0xf31768d4E42d5e80aE95415309D7908ae730Fb41 \
+cast send 0x72cd70d28284dD215257f73e1C5aD8e28847215B \
   "claim(bytes,bytes32[],bytes,string,address)" \
   $(echo "$CLAIM" | jq -r '.proof') \
   $(echo "$CLAIM" | jq -c '.inputs') \
@@ -212,13 +212,13 @@ ISigstoreVerifier.Attestation memory att = verifier.verifyAndDecode(proof, input
 
 ### On-Chain Verifier
 
-**Base Sepolia:** [`0x0Af922925AE3602b0dC23c4cFCf54FABe2F54725`](https://sepolia.basescan.org/address/0x0Af922925AE3602b0dC23c4cFCf54FABe2F54725)
+**Base Sepolia:** [`0xbD08fd15E893094Ad3191fdA0276Ac880d0FA3e1`](https://sepolia.basescan.org/address/0xbD08fd15E893094Ad3191fdA0276Ac880d0FA3e1)
 
 ```solidity
 import {ISigstoreVerifier} from "./ISigstoreVerifier.sol";
 
 contract MyApp {
-    ISigstoreVerifier verifier = ISigstoreVerifier(0x0Af922925AE3602b0dC23c4cFCf54FABe2F54725);
+    ISigstoreVerifier verifier = ISigstoreVerifier(0xbD08fd15E893094Ad3191fdA0276Ac880d0FA3e1);
 
     function claimReward(bytes calldata proof, bytes32[] calldata inputs) external {
         ISigstoreVerifier.Attestation memory att = verifier.verifyAndDecode(proof, inputs);
@@ -301,7 +301,7 @@ The artifact contains `claim.json` ready for submission.
 ### Verify On-Chain
 
 ```bash
-cast call 0x0Af922925AE3602b0dC23c4cFCf54FABe2F54725 \
+cast call 0xbD08fd15E893094Ad3191fdA0276Ac880d0FA3e1 \
   "verifyAndDecode(bytes,bytes32[])" \
   "$(cat identity-proof/proof.hex)" "$(cat identity-proof/inputs.json)" \
   --rpc-url https://sepolia.base.org

@@ -19,7 +19,7 @@ The magic: Claude runs inside GitHub Actions (a TEE), so the worker can't fake t
 
 | Contract | Address |
 |----------|---------|
-| SigstoreVerifier | `0x0Af922925AE3602b0dC23c4cFCf54FABe2F54725` |
+| SigstoreVerifier | `0xbD08fd15E893094Ad3191fdA0276Ac880d0FA3e1` |
 | SelfJudgingEscrow | `0x...` (deploy your own) |
 
 ---

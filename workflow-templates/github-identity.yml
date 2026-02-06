@@ -28,7 +28,7 @@ on:
       faucet_address:
         description: 'Faucet contract address (Base Sepolia)'
         required: true
-        default: '0xf31768d4E42d5e80aE95415309D7908ae730Fb41'
+        default: '0x72cd70d28284dD215257f73e1C5aD8e28847215B'
       generate_proof:
         description: 'Generate ZK proof (takes ~5 min)'
         required: true

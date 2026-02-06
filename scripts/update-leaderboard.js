@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Fetches faucet claims from Basescan and generates leaderboard JSON
 
-const FAUCET = process.env.FAUCET_ADDRESS || '0xf31768d4E42d5e80aE95415309D7908ae730Fb41'
+const FAUCET = process.env.FAUCET_ADDRESS || '0x72cd70d28284dD215257f73e1C5aD8e28847215B'
 const CHAIN_ID = process.env.CHAIN_ID || '84532' // Base Sepolia
 const API_KEY = process.env.BASESCAN_API_KEY
 const CLAIMED_TOPIC = '0x9d2f14df77ba038ff6f9ba99bbdcfbc30f1650b9574e3b7bbae993df15a92f30'
