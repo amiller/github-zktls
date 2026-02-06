@@ -166,88 +166,31 @@ jobs:
         with:
           subject-path: proof/certificate.json
 
-      - name: Install nargo
+      - name: Copy attestation bundle
         if: steps.meta.outputs.skip != 'true'
-        run: |
-          curl -L https://raw.githubusercontent.com/noir-lang/noirup/main/install | bash
-          /root/.nargo/bin/noirup -v 1.0.0-beta.17 || ~/.nargo/bin/noirup -v 1.0.0-beta.17
-          echo "$HOME/.nargo/bin" >> $GITHUB_PATH
+        run: cp ${{ steps.attest.outputs.bundle-path }} proof/bundle.json
 
-      - name: Install barretenberg
+      - name: Generate ZK proof
         if: steps.meta.outputs.skip != 'true'
         run: |
-          curl -L -o /tmp/bb.tar.gz \
-            "https://github.com/AztecProtocol/aztec-packages/releases/download/v3.0.3/barretenberg-amd64-linux.tar.gz"
-          sudo tar -xzf /tmp/bb.tar.gz -C /usr/local/bin
-          sudo chmod +x /usr/local/bin/bb
-
-      - name: Build prover
-        if: steps.meta.outputs.skip != 'true'
-        run: |
-          cd zk-proof/js && npm install && npx tsc
-          cd ../circuits && nargo compile
-
-      - name: Fetch attestation bundle
-        if: steps.meta.outputs.skip != 'true'
-        run: |
-          if [ -f "${{ steps.attest.outputs.bundle-path }}" ]; then
-            cp "${{ steps.attest.outputs.bundle-path }}" proof/bundle.json
-          else
-            gh attestation download proof/certificate.json -R "${{ github.repository }}" -o proof/
-            mv proof/*.jsonl proof/bundle.json 2>/dev/null || true
-          fi
-          echo "Bundle:" && ls -la proof/bundle.json
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Generate witness
-        if: steps.meta.outputs.skip != 'true'
-        run: |
-          cd zk-proof/js
-          node dist/index.js witness "$(pwd)/../../proof/bundle.json"
-
-      - name: Generate proof
-        if: steps.meta.outputs.skip != 'true'
-        run: |
-          cd zk-proof/circuits
-          nargo execute
-          bb write_vk -b target/zk_github_attestation.json -o target/vk -t evm
-          bb prove \
-            -b target/zk_github_attestation.json \
-            -w target/zk_github_attestation.gz \
-            -k target/vk/vk \
-            -o target/proof \
-            -t evm
-          bb verify \
-            -k target/vk/vk \
-            -p target/proof/proof \
-            -i target/proof/public_inputs \
-            -t evm
-          echo "Proof verified locally!"
+          docker run --rm -v ${{ github.workspace }}/proof:/work \
+            ghcr.io/amiller/zkproof@sha256:8425820d13dfa3d7e268412cce15ddf198798bee969afc40b048eeafe6fa37e7 \
+            generate /work/bundle.json /work
 
       - name: Format claim data
         if: steps.meta.outputs.skip != 'true'
         id: claim
         run: |
-          cd zk-proof/circuits
-          PROOF_HEX="0x$(xxd -p -c 99999 target/proof/proof)"
-
           node -e "
             const fs = require('fs');
-            const raw = fs.readFileSync('target/proof/public_inputs');
-            const inputs = [];
-            for (let i = 0; i < raw.length; i += 32) {
-              inputs.push('0x' + raw.slice(i, i + 32).toString('hex'));
-            }
-            const cert = fs.readFileSync('../../proof/certificate.json', 'utf8');
-            const certJson = JSON.parse(cert);
-            console.log('INPUTS=' + JSON.stringify(inputs));
-            console.log('CERT_HEX=0x' + Buffer.from(cert, 'utf8').toString('hex'));
-            console.log('EMAIL=' + certJson.email);
-            console.log('RECIPIENT=' + certJson.recipient_address);
+            const claim = JSON.parse(fs.readFileSync('proof/claim.json', 'utf8'));
+            console.log('proof_hex=' + claim.proof);
+            console.log('INPUTS=' + JSON.stringify(claim.inputs));
+            console.log('CERT_HEX=0x' + Buffer.from(claim.certificate, 'utf8').toString('hex'));
+            const cert = JSON.parse(claim.certificate);
+            console.log('EMAIL=' + cert.email);
+            console.log('RECIPIENT=' + cert.recipient_address);
           " >> "$GITHUB_OUTPUT"
-
-          echo "proof_hex=$PROOF_HEX" >> "$GITHUB_OUTPUT"
 
       - name: Install Foundry
         if: steps.meta.outputs.skip != 'true'

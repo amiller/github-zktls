@@ -96,7 +96,8 @@ jobs:
         if: ${{ inputs.generate_proof }}
         run: |
           docker run --rm -v ${{ github.workspace }}/proof:/work \
-            ghcr.io/amiller/zkproof generate /work/bundle.json /work
+            ghcr.io/amiller/zkproof@sha256:8425820d13dfa3d7e268412cce15ddf198798bee969afc40b048eeafe6fa37e7 \
+            generate /work/bundle.json /work
 
       - name: Update artifact with proof
         if: ${{ inputs.generate_proof }}
