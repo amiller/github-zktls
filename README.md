@@ -83,7 +83,10 @@ cast send 0xf31768d4E42d5e80aE95415309D7908ae730Fb41 \
 
 ```bash
 gh run download -n identity-proof
-docker run --rm -v $(pwd)/identity-proof:/work ghcr.io/amiller/zkproof generate /work/bundle.json /work
+cd identity-proof
+gh attestation download certificate.json -o .
+mv *.jsonl bundle.json
+docker run --rm -v $(pwd):/work ghcr.io/amiller/zkproof generate /work/bundle.json /work
 ```
 
 ### Need an ETH address?

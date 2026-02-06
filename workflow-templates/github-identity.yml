@@ -2,7 +2,8 @@
 #
 # PURPOSE: Prove you control a GitHub account by running a workflow.
 #
-# ARTIFACT: JSON containing your GitHub username, recipient address, and target faucet.
+# ARTIFACT: JSON containing your GitHub username, recipient address, and target faucet,
+#           plus a ZK proof ready for on-chain submission.
 #
 # TRUST MODEL:
 #   - The workflow runs in YOUR repo (you triggered it)
@@ -11,10 +12,8 @@
 #
 # HOW TO CLAIM:
 #   1. Run this workflow with your ETH address
-#   2. Download the attestation bundle artifact
-#   3. Generate proof: docker run --rm -v $(pwd):/work -e RECIPIENT=0xYOUR_ADDR zkproof generate /work/bundle.json /work/proof
-#   4. Open issue at main repo with title "[CLAIM] Faucet request"
-#   5. Paste contents of proof/claim.json in the issue body
+#   2. Download the identity-proof artifact
+#   3. Open issue at main repo with title "[CLAIM]" and paste claim.json
 #
 # NO SECRETS NEEDED - just fork and run.
 
@@ -30,6 +29,11 @@ on:
         description: 'Faucet contract address (Base Sepolia)'
         required: true
         default: '0xf31768d4E42d5e80aE95415309D7908ae730Fb41'
+      generate_proof:
+        description: 'Generate ZK proof (takes ~5 min)'
+        required: true
+        type: boolean
+        default: true
 
 permissions:
   id-token: write
@@ -82,3 +86,26 @@ jobs:
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: proof/certificate.json
+
+      - name: Download attestation bundle
+        if: ${{ inputs.generate_proof }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sleep 5  # Wait for attestation to propagate
+          gh attestation download proof/certificate.json -o proof/
+          mv proof/*.jsonl proof/bundle.json
+
+      - name: Generate ZK proof
+        if: ${{ inputs.generate_proof }}
+        run: |
+          docker run --rm -v ${{ github.workspace }}/proof:/work \
+            ghcr.io/amiller/zkproof generate /work/bundle.json /work
+
+      - name: Update artifact with proof
+        if: ${{ inputs.generate_proof }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: identity-proof
+          path: proof/
+          overwrite: true
