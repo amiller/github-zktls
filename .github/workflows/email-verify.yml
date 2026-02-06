@@ -61,11 +61,35 @@ jobs:
             const emailMatch = botComment.body.match(/Email: `(\S+@\S+\.\S+)`/);
             const recipientMatch = botComment.body.match(/Recipient: `(0x[a-fA-F0-9]{40})`/);
             const timestampMatch = botComment.body.match(/Timestamp: `([^`]+)`/);
+            const runIdMatch = botComment.body.match(/Run ID: `(\d+)`/);
 
-            if (!hashMatch || !emailMatch || !recipientMatch || !timestampMatch) {
+            if (!hashMatch || !emailMatch || !recipientMatch || !timestampMatch || !runIdMatch) {
               core.setFailed('Could not parse challenge metadata');
               return;
             }
+
+            // Verify Phase 1 workflow run: correct workflow file + same commit
+            const challengeRunId = runIdMatch[1];
+            const run = await github.rest.actions.getWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: parseInt(challengeRunId)
+            });
+
+            const phase1 = run.data;
+            if (phase1.status !== 'completed' || phase1.conclusion !== 'success') {
+              core.setFailed(`Phase 1 run ${challengeRunId} did not succeed: ${phase1.conclusion}`);
+              return;
+            }
+            if (!phase1.path.endsWith('email-challenge.yml')) {
+              core.setFailed(`Phase 1 run used wrong workflow: ${phase1.path} (expected email-challenge.yml)`);
+              return;
+            }
+            if (phase1.head_sha !== context.sha) {
+              core.setFailed(`Phase 1 commit ${phase1.head_sha} !== Phase 2 commit ${context.sha}. Both must run at same commit.`);
+              return;
+            }
+            console.log(`Phase 1 verified: run ${challengeRunId}, workflow ${phase1.path}, commit ${phase1.head_sha}`);
 
             // Check expiry (1 hour)
             const challengeTime = new Date(timestampMatch[1]);

@@ -130,6 +130,7 @@ jobs:
                 `- Email: \`${email}\``,
                 `- Recipient: \`${recipient}\``,
                 `- Timestamp: \`${timestamp}\``,
+                `- Run ID: \`${context.runId}\``,
                 `- Expires: 1 hour`,
                 `</details>`
               ].join('\n')
