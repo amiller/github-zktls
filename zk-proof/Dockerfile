@@ -113,8 +113,8 @@ case "$1" in
       let faucet = '';
 
       if (fs.existsSync(certPath)) {
-        // Read as raw string to preserve trailing newline
-        certificate = fs.readFileSync(certPath, 'utf8');
+        // Read file and strip trailing newline (jq -r adds one back when extracting)
+        certificate = fs.readFileSync(certPath, 'utf8').trimEnd();
         try {
           const certJson = JSON.parse(certificate);
           username = certJson.github_actor || '';
