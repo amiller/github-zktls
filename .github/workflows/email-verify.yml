@@ -172,10 +172,13 @@ jobs:
 
       - name: Generate ZK proof
         if: steps.meta.outputs.skip != 'true'
+        env:
+          PROVER_DIGEST: sha256:8425820d13dfa3d7e268412cce15ddf198798bee969afc40b048eeafe6fa37e7
         run: |
+          REGISTRY="${{ vars.PROVER_REGISTRY || 'ghcr.io/amiller/zkproof' }}"
+          echo "Using prover: ${REGISTRY}@${PROVER_DIGEST}"
           docker run --rm -v ${{ github.workspace }}/proof:/work \
-            ghcr.io/amiller/zkproof@sha256:8425820d13dfa3d7e268412cce15ddf198798bee969afc40b048eeafe6fa37e7 \
-            generate /work/bundle.json /work
+            "${REGISTRY}@${PROVER_DIGEST}" generate /work/bundle.json /work
 
       - name: Format claim data
         if: steps.meta.outputs.skip != 'true'
