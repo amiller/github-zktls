@@ -1,10 +1,13 @@
 # Email Identity Verification
 #
-# Phase 2 of email verification. Triggered when a user clicks the magic
-# link in their email, which opens a new issue with title [EMAIL-VERIFY]
-# and the token as the body.
+# Phase 2 of email verification. Triggered when someone comments on an
+# [EMAIL] issue with the verification code from the email.
 #
-# Cross-references the original [EMAIL] issue to get challenge metadata,
+# The commenter doesn't need to be the email recipient — anyone (the
+# notary, a bot, a friend) can paste the code. What matters is that
+# sha256(code) matches the challenge_hash from Phase 1.
+#
+# Cross-references the Phase 1 bot comment to get challenge metadata,
 # verifies the token, generates a certificate + ZK proof, and mints NFT.
 #
 # REQUIRED SECRETS:
@@ -13,8 +16,8 @@
 name: Email Verify
 
 on:
-  issues:
-    types: [opened]
+  issue_comment:
+    types: [created]
 
 permissions:
   id-token: write
@@ -25,35 +28,31 @@ permissions:
 
 jobs:
   verify-and-claim:
-    if: contains(github.event.issue.title, '[EMAIL-VERIFY]')
+    if: >-
+      contains(github.event.issue.title, '[EMAIL]') &&
+      !contains(github.event.issue.title, '[EMAIL-VERIFY]') &&
+      github.event.comment.user.login != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Parse verify issue and cross-reference original
+      - name: Parse comment and cross-reference challenge
         id: meta
         uses: actions/github-script@v7
         with:
           script: |
-            const title = context.payload.issue.title;
-            const token = (context.payload.issue.body || '').trim();
+            const token = (context.payload.comment.body || '').trim();
 
-            // Extract original issue number from title: [EMAIL-VERIFY] #123
-            const issueMatch = title.match(/#(\d+)/);
-            if (!issueMatch) {
-              core.setFailed('Could not find original issue reference in title (expected [EMAIL-VERIFY] #NNN)');
+            if (!token || token.length < 32 || !/^[a-f0-9]+$/i.test(token)) {
+              console.log('Comment is not a valid hex token, skipping.');
+              core.setOutput('skip', 'true');
               return;
             }
-            const originalIssueNum = parseInt(issueMatch[1]);
+            core.setOutput('skip', 'false');
 
-            if (!token || token.length < 32) {
-              core.setFailed('Invalid or missing token in issue body');
-              return;
-            }
-
-            // Fetch the original issue's comments to find challenge metadata
+            // Find the bot comment with challenge metadata
             const comments = await github.rest.issues.listComments({
-              issue_number: originalIssueNum,
+              issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo
             });
@@ -63,11 +62,10 @@ jobs:
               c.body.includes('Challenge hash:')
             );
             if (!botComment) {
-              core.setFailed(`No challenge comment found on issue #${originalIssueNum}`);
+              core.setFailed('No challenge comment found on this issue');
               return;
             }
 
-            // Extract metadata from the original issue's bot comment
             const hashMatch = botComment.body.match(/Challenge hash: `([a-f0-9]{64})`/);
             const emailMatch = botComment.body.match(/Email: `(\S+@\S+\.\S+)`/);
             const recipientMatch = botComment.body.match(/Recipient: `(0x[a-fA-F0-9]{40})`/);
@@ -75,7 +73,7 @@ jobs:
             const runIdMatch = botComment.body.match(/Run ID: `(\d+)`/);
 
             if (!hashMatch || !emailMatch || !recipientMatch || !timestampMatch || !runIdMatch) {
-              core.setFailed('Could not parse challenge metadata from original issue');
+              core.setFailed('Could not parse challenge metadata from bot comment');
               return;
             }
 
@@ -114,13 +112,12 @@ jobs:
             core.setOutput('email', emailMatch[1]);
             core.setOutput('recipient', recipientMatch[1]);
             core.setOutput('token', token);
-            core.setOutput('original_issue', originalIssueNum.toString());
             console.log(`Email: ${emailMatch[1]}`);
             console.log(`Recipient: ${recipientMatch[1]}`);
-            console.log(`Original issue: #${originalIssueNum}`);
             console.log(`Elapsed: ${Math.round(elapsed/1000)}s`);
 
       - name: Verify token
+        if: steps.meta.outputs.skip != 'true'
         id: verify
         run: |
           TOKEN=$(echo -n "$TOKEN" | tr -d '[:space:]')
@@ -139,6 +136,7 @@ jobs:
           EXPECTED_HASH: ${{ steps.meta.outputs.challenge_hash }}
 
       - name: Generate certificate
+        if: steps.meta.outputs.skip != 'true'
         run: |
           mkdir -p proof
           cat > proof/certificate.json << EOF
@@ -155,24 +153,28 @@ jobs:
           echo "Certificate:" && cat proof/certificate.json
 
       - name: Upload artifact
+        if: steps.meta.outputs.skip != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: email-proof
           path: proof/
 
       - name: Attest
+        if: steps.meta.outputs.skip != 'true'
         id: attest
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: proof/certificate.json
 
       - name: Install nargo
+        if: steps.meta.outputs.skip != 'true'
         run: |
           curl -L https://raw.githubusercontent.com/noir-lang/noirup/main/install | bash
           /root/.nargo/bin/noirup -v 1.0.0-beta.17 || ~/.nargo/bin/noirup -v 1.0.0-beta.17
           echo "$HOME/.nargo/bin" >> $GITHUB_PATH
 
       - name: Install barretenberg
+        if: steps.meta.outputs.skip != 'true'
         run: |
           curl -L -o /tmp/bb.tar.gz \
             "https://github.com/AztecProtocol/aztec-packages/releases/download/v3.0.3/barretenberg-amd64-linux.tar.gz"
@@ -180,11 +182,13 @@ jobs:
           sudo chmod +x /usr/local/bin/bb
 
       - name: Build prover
+        if: steps.meta.outputs.skip != 'true'
         run: |
           cd zk-proof/js && npm install && npx tsc
           cd ../circuits && nargo compile
 
       - name: Fetch attestation bundle
+        if: steps.meta.outputs.skip != 'true'
         run: |
           if [ -f "${{ steps.attest.outputs.bundle-path }}" ]; then
             cp "${{ steps.attest.outputs.bundle-path }}" proof/bundle.json
@@ -197,11 +201,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Generate witness
+        if: steps.meta.outputs.skip != 'true'
         run: |
           cd zk-proof/js
           node dist/index.js witness "$(pwd)/../../proof/bundle.json"
 
       - name: Generate proof
+        if: steps.meta.outputs.skip != 'true'
         run: |
           cd zk-proof/circuits
           nargo execute
@@ -220,6 +226,7 @@ jobs:
           echo "Proof verified locally!"
 
       - name: Format claim data
+        if: steps.meta.outputs.skip != 'true'
         id: claim
         run: |
           cd zk-proof/circuits
@@ -243,9 +250,11 @@ jobs:
           echo "proof_hex=$PROOF_HEX" >> "$GITHUB_OUTPUT"
 
       - name: Install Foundry
+        if: steps.meta.outputs.skip != 'true'
         uses: foundry-rs/foundry-toolchain@v1
 
       - name: Submit claim transaction
+        if: steps.meta.outputs.skip != 'true'
         id: submit
         env:
           RELAYER_KEY: ${{ secrets.RELAYER_PRIVATE_KEY }}
@@ -282,15 +291,14 @@ jobs:
           echo "tx_hash=$TX_HASH" >> $GITHUB_OUTPUT
           echo "Transaction submitted: $TX_HASH"
 
-      - name: Comment success on original issue
-        if: success()
+      - name: Comment success
+        if: success() && steps.meta.outputs.skip != 'true'
         uses: actions/github-script@v7
         with:
           script: |
             const txHash = '${{ steps.submit.outputs.tx_hash }}';
             const email = '${{ steps.meta.outputs.email }}';
             const recipient = '${{ steps.meta.outputs.recipient }}';
-            const originalIssue = parseInt('${{ steps.meta.outputs.original_issue }}');
 
             const successMsg = [
               `## ✅ Email Verified — NFT Minted!`,
@@ -302,32 +310,22 @@ jobs:
               `Your Email Identity NFT has been minted on Base Sepolia.`
             ].join('\n');
 
-            // Comment on original [EMAIL] issue
             await github.rest.issues.createComment({
-              issue_number: originalIssue,
+              issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: successMsg
             });
             await github.rest.issues.update({
-              issue_number: originalIssue,
+              issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: 'closed',
               labels: ['email-claimed']
             });
 
-            // Close this verify issue too
-            await github.rest.issues.update({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'closed',
-              labels: ['email-verified']
-            });
-
       - name: Comment failure
-        if: failure()
+        if: failure() && steps.meta.outputs.skip != 'true'
         uses: actions/github-script@v7
         with:
           script: |
@@ -335,7 +333,6 @@ jobs:
               : '${{ steps.submit.outcome }}' === 'failure' ? 'claim submission'
               : 'proof generation';
             const errorReason = '${{ steps.submit.outputs.error_reason }}' || 'See workflow logs';
-            const originalIssue = parseInt('${{ steps.meta.outputs.original_issue }}') || null;
 
             const failMsg = [
               `## ❌ Verification Failed`,
@@ -346,20 +343,9 @@ jobs:
               `[View logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})`
             ].join('\n');
 
-            // Comment on this verify issue
             await github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: failMsg
             });
-
-            // Also comment on original issue if we have it
-            if (originalIssue) {
-              await github.rest.issues.createComment({
-                issue_number: originalIssue,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                body: failMsg
-              });
-            }

@@ -3,9 +3,9 @@
 # Phase 1 of email verification. Triggered when someone opens an issue
 # with [EMAIL] in the title.
 #
-# Generates a random token, embeds it in a "magic link" that pre-fills
-# a new GitHub issue, and emails the link. The user clicks → submits →
-# Phase 2 triggers. The token is never visually displayed to the user.
+# Generates a random token and emails it to the user. The user shares
+# the code with whoever is helping them (notary), who comments it on
+# the issue to trigger Phase 2. No GitHub account needed for the claimer.
 #
 # TRUST MODEL:
 #   - Token generated inside GitHub Actions (can't be intercepted)
@@ -85,17 +85,9 @@ jobs:
           TO="${{ steps.parse.outputs.email }}"
           TOKEN="${{ steps.challenge.outputs.token }}"
           RECIPIENT="${{ steps.parse.outputs.recipient }}"
-          ISSUE_NUM="${{ github.event.issue.number }}"
           REPO="${{ github.repository }}"
-
-          # Build the magic link: clicking it opens a pre-filled GitHub issue
-          TITLE=$(python3 -c "import urllib.parse; print(urllib.parse.quote('[EMAIL-VERIFY] #${ISSUE_NUM}'))")
-          BODY=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${TOKEN}'))")
-          VERIFY_LINK="https://github.com/${REPO}/issues/new?title=${TITLE}&body=${BODY}"
-
           ADDR_SHORT="${RECIPIENT:0:6}...${RECIPIENT: -4}"
 
-          # HTML email with verify button
           RAW_MSG="From: ${FROM}
           To: ${TO}
           Subject: Verify your email for ${ADDR_SHORT}
@@ -106,11 +98,10 @@ jobs:
             <h2 style=\"margin-top:0\">Verify your email</h2>
             <p>A request was made to link <strong>${TO}</strong> to Ethereum address:</p>
             <p style=\"font-family:monospace;background:#f5f5f5;padding:10px;border-radius:4px;word-break:break-all\">${RECIPIENT}</p>
-            <p>Click below to confirm. This will open a GitHub page where you submit the verification.</p>
-            <p style=\"text-align:center;margin:24px 0\">
-              <a href=\"${VERIFY_LINK}\" style=\"display:inline-block;background:#2ea44f;color:#fff;padding:12px 32px;border-radius:6px;text-decoration:none;font-weight:600;font-size:16px\">Verify My Email</a>
-            </p>
-            <p style=\"color:#666;font-size:13px\">If you did not request this, ignore this email. This link expires in 1 hour.</p>
+            <p>If you authorized this, copy the code below and share it with whoever is helping you claim your NFT.</p>
+            <p style=\"color:#b08800;background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:12px;font-size:13px\">Do not share this code if you did not request this verification.</p>
+            <p style=\"font-family:monospace;background:#f0f0f0;border:1px solid #ddd;border-radius:6px;padding:14px;font-size:13px;word-break:break-all;text-align:center;letter-spacing:1px\">${TOKEN}</p>
+            <p style=\"color:#666;font-size:13px\">This code expires in 1 hour.</p>
             <hr style=\"border:none;border-top:1px solid #eee;margin:20px 0\">
             <p style=\"color:#999;font-size:11px\">Sent from <a href=\"https://github.com/${REPO}\">${REPO}</a> via GitHub Actions</p>
           </div>"
@@ -136,7 +127,7 @@ jobs:
               body: [
                 `## 📧 Verification email sent!`,
                 ``,
-                `Check your inbox and click the link to verify.`,
+                `An email was sent to the address provided. The recipient should share the verification code from the email, then comment it on this issue to complete verification.`,
                 ``,
                 `<details>`,
                 `<summary>Verification metadata (for auditors)</summary>`,

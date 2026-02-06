@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Email Verification Code</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f6f8fa; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.card { background: #fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); max-width: 480px; width: 100%; padding: 32px; text-align: center; }
+h1 { font-size: 20px; margin-bottom: 12px; }
+p { color: #555; font-size: 14px; line-height: 1.5; margin-bottom: 16px; }
+.code-box { background: #f0f0f0; border: 1px solid #ddd; border-radius: 8px; padding: 16px; font-family: monospace; font-size: 13px; word-break: break-all; margin: 16px 0; user-select: all; cursor: text; }
+.copy-btn { background: #2ea44f; color: #fff; border: none; border-radius: 6px; padding: 12px 32px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 8px; }
+.copy-btn:hover { background: #2c974b; }
+.copy-btn.copied { background: #666; }
+.warning { color: #b08800; background: #fff8e1; border: 1px solid #ffe082; border-radius: 6px; padding: 12px; font-size: 13px; margin-top: 20px; }
+.no-code { color: #999; }
+</style>
+</head>
+<body>
+<div class="card">
+<h1>Your Verification Code</h1>
+<div id="content">
+  <p>Copy this code and share it with whoever is helping you claim your Email Identity NFT.</p>
+  <div class="code-box" id="code"></div>
+  <button class="copy-btn" id="copyBtn" onclick="copyCode()">Copy Code</button>
+  <div class="warning">
+    Only share this code if you requested an email verification. If you did not request this, close this page.
+  </div>
+</div>
+<div id="no-code" style="display:none">
+  <p class="no-code">No verification code found in the URL. This link may be invalid or expired.</p>
+</div>
+</div>
+<script>
+const token = window.location.hash.slice(1);
+if (token && token.length >= 32) {
+  document.getElementById('code').textContent = token;
+} else {
+  document.getElementById('content').style.display = 'none';
+  document.getElementById('no-code').style.display = 'block';
+}
+function copyCode() {
+  navigator.clipboard.writeText(token).then(() => {
+    const btn = document.getElementById('copyBtn');
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy Code'; btn.classList.remove('copied'); }, 2000);
+  });
+}
+</script>
+</body>
+</html>
