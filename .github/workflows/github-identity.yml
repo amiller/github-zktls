@@ -83,18 +83,14 @@ jobs:
           path: proof/
 
       - name: Attest
+        id: attest
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: proof/certificate.json
 
-      - name: Download attestation bundle
+      - name: Copy attestation bundle
         if: ${{ inputs.generate_proof }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          sleep 5  # Wait for attestation to propagate
-          gh attestation download ${{ github.workspace }}/proof/certificate.json --owner ${{ github.repository_owner }} -o proof/
-          mv proof/*.jsonl proof/bundle.json
+        run: cp ${{ steps.attest.outputs.bundle-path }} proof/bundle.json
 
       - name: Generate ZK proof
         if: ${{ inputs.generate_proof }}
