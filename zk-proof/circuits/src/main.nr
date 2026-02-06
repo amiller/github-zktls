@@ -216,11 +216,13 @@ fn verify_artifact_hash(
 // Find OCTET STRING (0x04), UTF8String (0x0c), or IA5String (0x16) within search range
 fn find_utf8_string(data: [u8; MAX_TBS_LENGTH], start: u32, max_search: u32) -> u32 {
     let mut result = start;
+    let mut found = false;
     for i in 0..20 {
-        if i < max_search {
+        if (i < max_search) & !found {
             let idx = start + i;
             if (data[idx] == 0x04) | (data[idx] == 0x0c) | (data[idx] == 0x16) {
                 result = idx;
+                found = true;
             }
         }
     }
