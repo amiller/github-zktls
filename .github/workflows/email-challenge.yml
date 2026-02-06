@@ -1,0 +1,144 @@
+# Email Identity Challenge
+#
+# Phase 1 of email verification. Triggered when someone opens an issue
+# with [EMAIL] in the title.
+#
+# Parses email + recipient address from issue body, generates a random
+# challenge code, sends it via AWS SES, and comments the challenge hash.
+#
+# TRUST MODEL:
+#   - Challenge generated inside GitHub Actions (can't be intercepted)
+#   - SES sends email but doesn't store body contents
+#   - Workflow code is auditable + pinned by Sigstore
+#   - Anyone can be the notary — just host this workflow + SES creds
+#
+# REQUIRED SECRETS:
+#   - AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY (SES send permission)
+#   - SES_FROM_EMAIL (verified sender address)
+#   - AWS_REGION (e.g. us-east-1)
+#
+# ISSUE FORMAT:
+#   Title: [EMAIL] Claim email NFT
+#   Body:
+#     email: user@example.com
+#     recipient: 0x1234...
+
+name: Email Challenge
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+
+jobs:
+  send-challenge:
+    if: contains(github.event.issue.title, '[EMAIL]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Parse issue
+        id: parse
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.issue.body || '';
+
+            // Parse email
+            const emailMatch = body.match(/email:\s*(\S+@\S+\.\S+)/i);
+            if (!emailMatch) {
+              core.setFailed('No email found. Use format: email: user@example.com');
+              return;
+            }
+            const email = emailMatch[1].toLowerCase();
+
+            // Parse recipient address
+            const addrMatch = body.match(/recipient:\s*(0x[a-fA-F0-9]{40})/i);
+            if (!addrMatch) {
+              core.setFailed('No recipient address found. Use format: recipient: 0x...');
+              return;
+            }
+            const recipient = addrMatch[1].toLowerCase();
+
+            core.setOutput('email', email);
+            core.setOutput('recipient', recipient);
+            console.log(`Email: ${email}`);
+            console.log(`Recipient: ${recipient}`);
+
+      - name: Generate challenge
+        id: challenge
+        run: |
+          # Generate random 6-digit code
+          CODE=$(openssl rand -hex 3 | tr 'a-f' 'A-F')
+          CODE=$(printf "%06d" $((16#$CODE % 1000000)))
+          echo "code=$CODE" >> $GITHUB_OUTPUT
+
+          # Hash for public commitment
+          HASH=$(echo -n "$CODE" | sha256sum | cut -d' ' -f1)
+          echo "hash=$HASH" >> $GITHUB_OUTPUT
+          echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
+
+      - name: Send email via SES
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          aws ses send-email \
+            --from "${{ secrets.SES_FROM_EMAIL }}" \
+            --destination "ToAddresses=${{ steps.parse.outputs.email }}" \
+            --message "Subject={Data='Email Verification Challenge'},Body={Text={Data='Your verification code is: ${{ steps.challenge.outputs.code }}
+
+          Enter this code as a comment on your GitHub issue to verify your email and claim your NFT.
+
+          This code expires in 1 hour.'}}"
+
+      - name: Comment on issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const hash = '${{ steps.challenge.outputs.hash }}';
+            const timestamp = '${{ steps.challenge.outputs.timestamp }}';
+            const email = '${{ steps.parse.outputs.email }}';
+            const recipient = '${{ steps.parse.outputs.recipient }}';
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: [
+                `## 📧 Challenge Sent!`,
+                ``,
+                `A verification code has been sent to your email.`,
+                `**Reply to this issue with just the 6-digit code.**`,
+                ``,
+                `<details>`,
+                `<summary>Verification metadata (for auditors)</summary>`,
+                ``,
+                `- Challenge hash: \`${hash}\``,
+                `- Email: \`${email}\``,
+                `- Recipient: \`${recipient}\``,
+                `- Timestamp: \`${timestamp}\``,
+                `- Expires: 1 hour`,
+                `</details>`
+              ].join('\n')
+            });
+
+            await github.rest.issues.addLabels({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: ['email-pending']
+            });
+
+      - name: Comment failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## ❌ Challenge Failed\n\nCould not send verification email. Check issue format:\n\`\`\`\nemail: user@example.com\nrecipient: 0x1234...\n\`\`\``
+            });

@@ -1,0 +1,303 @@
+# Email Identity Verification
+#
+# Phase 2 of email verification. Triggered when someone comments on
+# an [EMAIL] issue with the challenge code.
+#
+# Verifies the code matches the challenge hash, generates a certificate,
+# attests it via Sigstore, generates a ZK proof, and submits the claim
+# to mint an NFT.
+#
+# REQUIRED SECRETS:
+#   - RELAYER_PRIVATE_KEY: funded wallet for gas
+#
+# REQUIRED LABELS:
+#   - "email-pending" must exist on the issue (added by email-challenge.yml)
+
+name: Email Verify
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  id-token: write
+  contents: read
+  attestations: write
+  issues: write
+
+jobs:
+  verify-and-claim:
+    if: |
+      contains(github.event.issue.title, '[EMAIL]') &&
+      github.event.comment.user.login != 'github-actions[bot]' &&
+      contains(join(github.event.issue.labels.*.name, ','), 'email-pending')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse challenge metadata from bot comment
+        id: meta
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Find the bot's challenge comment
+            const comments = await github.rest.issues.listComments({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            });
+
+            const botComment = comments.data.find(c =>
+              c.user.login === 'github-actions[bot]' &&
+              c.body.includes('Challenge hash:')
+            );
+            if (!botComment) {
+              core.setFailed('No challenge comment found');
+              return;
+            }
+
+            // Extract metadata
+            const hashMatch = botComment.body.match(/Challenge hash: `([a-f0-9]{64})`/);
+            const emailMatch = botComment.body.match(/Email: `(\S+@\S+\.\S+)`/);
+            const recipientMatch = botComment.body.match(/Recipient: `(0x[a-fA-F0-9]{40})`/);
+            const timestampMatch = botComment.body.match(/Timestamp: `([^`]+)`/);
+
+            if (!hashMatch || !emailMatch || !recipientMatch || !timestampMatch) {
+              core.setFailed('Could not parse challenge metadata');
+              return;
+            }
+
+            // Check expiry (1 hour)
+            const challengeTime = new Date(timestampMatch[1]);
+            const elapsed = Date.now() - challengeTime.getTime();
+            if (elapsed > 3600000) {
+              core.setFailed('Challenge expired (>1 hour). Open a new issue.');
+              return;
+            }
+
+            core.setOutput('challenge_hash', hashMatch[1]);
+            core.setOutput('email', emailMatch[1]);
+            core.setOutput('recipient', recipientMatch[1]);
+            console.log(`Email: ${emailMatch[1]}`);
+            console.log(`Recipient: ${recipientMatch[1]}`);
+            console.log(`Elapsed: ${Math.round(elapsed/1000)}s`);
+
+      - name: Verify challenge code
+        id: verify
+        run: |
+          # Get the comment text (just the code, trimmed)
+          CODE=$(echo -n "$COMMENT" | tr -d '[:space:]')
+          HASH=$(echo -n "$CODE" | sha256sum | cut -d' ' -f1)
+
+          echo "Expected: $EXPECTED_HASH"
+          echo "Got:      $HASH"
+
+          if [ "$HASH" != "$EXPECTED_HASH" ]; then
+            echo "::error::Challenge code does not match"
+            exit 1
+          fi
+          echo "Challenge verified!"
+        env:
+          COMMENT: ${{ github.event.comment.body }}
+          EXPECTED_HASH: ${{ steps.meta.outputs.challenge_hash }}
+
+      - name: Generate certificate
+        run: |
+          mkdir -p proof
+          cat > proof/certificate.json << EOF
+          {
+            "type": "email-identity",
+            "email": "${{ steps.meta.outputs.email }}",
+            "recipient_address": "${{ steps.meta.outputs.recipient }}",
+            "nft_contract": "${{ vars.EMAIL_NFT_ADDRESS }}",
+            "chain_id": 84532,
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "workflow_run": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          }
+          EOF
+          echo "Certificate:" && cat proof/certificate.json
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: email-proof
+          path: proof/
+
+      - name: Attest
+        id: attest
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: proof/certificate.json
+
+      - name: Install nargo
+        run: |
+          curl -L https://raw.githubusercontent.com/noir-lang/noirup/main/install | bash
+          /root/.nargo/bin/noirup -v 1.0.0-beta.17 || ~/.nargo/bin/noirup -v 1.0.0-beta.17
+          echo "$HOME/.nargo/bin" >> $GITHUB_PATH
+
+      - name: Install barretenberg
+        run: |
+          curl -L -o /tmp/bb.tar.gz \
+            "https://github.com/AztecProtocol/aztec-packages/releases/download/v3.0.3/barretenberg-amd64-linux.tar.gz"
+          sudo tar -xzf /tmp/bb.tar.gz -C /usr/local/bin
+          sudo chmod +x /usr/local/bin/bb
+
+      - name: Build prover
+        run: |
+          cd zk-proof/js && npm install && npx tsc
+          cd ../circuits && nargo compile
+
+      - name: Fetch attestation bundle
+        run: |
+          # Use the bundle from attest step, or download via gh CLI
+          if [ -f "${{ steps.attest.outputs.bundle-path }}" ]; then
+            cp "${{ steps.attest.outputs.bundle-path }}" proof/bundle.json
+          else
+            gh attestation download proof/certificate.json -R "${{ github.repository }}" -o proof/
+            mv proof/*.jsonl proof/bundle.json 2>/dev/null || true
+          fi
+          echo "Bundle:" && ls -la proof/bundle.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Generate witness
+        run: |
+          cd zk-proof/js
+          node dist/index.js witness "$(pwd)/../../proof/bundle.json"
+
+      - name: Generate proof
+        run: |
+          cd zk-proof/circuits
+          nargo execute
+          bb write_vk -b target/zk_github_attestation.json -o target/vk -t evm
+          bb prove \
+            -b target/zk_github_attestation.json \
+            -w target/zk_github_attestation.gz \
+            -k target/vk/vk \
+            -o target/proof \
+            -t evm
+          bb verify \
+            -k target/vk/vk \
+            -p target/proof/proof \
+            -i target/proof/public_inputs \
+            -t evm
+          echo "Proof verified locally!"
+
+      - name: Format claim data
+        id: claim
+        run: |
+          cd zk-proof/circuits
+          PROOF_HEX="0x$(xxd -p -c 99999 target/proof/proof)"
+
+          node -e "
+            const fs = require('fs');
+            const raw = fs.readFileSync('target/proof/public_inputs');
+            const inputs = [];
+            for (let i = 0; i < raw.length; i += 32) {
+              inputs.push('0x' + raw.slice(i, i + 32).toString('hex'));
+            }
+            const cert = fs.readFileSync('../../proof/certificate.json', 'utf8');
+            const certJson = JSON.parse(cert);
+            console.log('INPUTS=' + JSON.stringify(inputs));
+            console.log('CERT_HEX=0x' + Buffer.from(cert, 'utf8').toString('hex'));
+            console.log('EMAIL=' + certJson.email);
+            console.log('RECIPIENT=' + certJson.recipient_address);
+          " >> "$GITHUB_OUTPUT"
+
+          echo "proof_hex=$PROOF_HEX" >> "$GITHUB_OUTPUT"
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Submit claim transaction
+        id: submit
+        env:
+          RELAYER_KEY: ${{ secrets.RELAYER_PRIVATE_KEY }}
+        run: |
+          INPUTS='${{ steps.claim.outputs.INPUTS }}'
+          INPUTS_FORMATTED=$(echo "$INPUTS" | jq -r 'join(",")')
+
+          NFT_CONTRACT="${{ vars.EMAIL_NFT_ADDRESS }}"
+          echo "Submitting claim to EmailNFT at $NFT_CONTRACT..."
+
+          set +e
+          OUTPUT=$(cast send \
+            "$NFT_CONTRACT" \
+            "claim(bytes,bytes32[],bytes,string,address)" \
+            "${{ steps.claim.outputs.proof_hex }}" \
+            "[$INPUTS_FORMATTED]" \
+            "${{ steps.claim.outputs.CERT_HEX }}" \
+            "${{ steps.claim.outputs.EMAIL }}" \
+            "${{ steps.claim.outputs.RECIPIENT }}" \
+            --private-key "$RELAYER_KEY" \
+            --rpc-url https://sepolia.base.org \
+            --json 2>&1)
+          EXIT_CODE=$?
+          set -e
+
+          if [ $EXIT_CODE -ne 0 ]; then
+            REASON=$(echo "$OUTPUT" | grep -oP 'Error\("\K[^"]+' || echo "$OUTPUT" | head -1)
+            echo "error_reason=$REASON" >> $GITHUB_OUTPUT
+            echo "Transaction failed: $REASON"
+            exit 1
+          fi
+
+          TX_HASH=$(echo "$OUTPUT" | jq -r '.transactionHash')
+          echo "tx_hash=$TX_HASH" >> $GITHUB_OUTPUT
+          echo "Transaction submitted: $TX_HASH"
+
+      - name: Comment success
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const txHash = '${{ steps.submit.outputs.tx_hash }}';
+            const email = '${{ steps.meta.outputs.email }}';
+            const recipient = '${{ steps.meta.outputs.recipient }}';
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: [
+                `## ✅ Email Verified — NFT Minted!`,
+                ``,
+                `**Email:** \`${email}\``,
+                `**Recipient:** \`${recipient}\``,
+                `**Transaction:** [${txHash}](https://sepolia.basescan.org/tx/${txHash})`,
+                ``,
+                `Your Email Identity NFT has been minted on Base Sepolia.`
+              ].join('\n')
+            });
+
+            await github.rest.issues.update({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'closed',
+              labels: ['email-claimed']
+            });
+
+      - name: Comment failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const step = '${{ steps.verify.outcome }}' === 'failure' ? 'code verification'
+              : '${{ steps.submit.outcome }}' === 'failure' ? 'claim submission'
+              : 'proof generation';
+            const errorReason = '${{ steps.submit.outputs.error_reason }}' || 'See workflow logs';
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: [
+                `## ❌ Verification Failed`,
+                ``,
+                `**Step:** ${step}`,
+                `**Reason:** ${errorReason}`,
+                ``,
+                `[View logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})`
+              ].join('\n')
+            });
