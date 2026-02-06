@@ -103,6 +103,28 @@ Install [Rabby](https://rabby.io/) or [Rainbow](https://rainbow.me/) wallet. The
 
 ---
 
+## Try It: Email Identity NFT
+
+Prove you own an email address — no GitHub account, no wallet signing, no Docker needed. A notary sends you a challenge code by email; you share it back; an NFT gets minted.
+
+**EmailNFT:** [`0x720000d8999423e3c47d9dd0c22f33ab3a93534b`](https://sepolia.basescan.org/address/0x720000d8999423e3c47d9dd0c22f33ab3a93534b) (Base Sepolia)
+
+### How to claim
+
+1. [Open an issue](https://github.com/amiller/github-zktls/issues/new) with title `[EMAIL] claim NFT` and body:
+   ```
+   email: your@email.com
+   recipient: 0xYourEthAddress
+   ```
+2. Check your email for a 64-character hex code
+3. Comment the code on the issue (anyone can do this — the claimer doesn't need a GitHub account)
+
+The workflow verifies the code, generates a ZK proof, and mints an ERC-721 with an on-chain SVG showing the verified email. One NFT per email, fully on-chain.
+
+**Anyone can run their own notary** — just fork this repo and add AWS SES credentials. See [docs/email-login.md](docs/email-login.md) for the full walkthrough and trust model.
+
+---
+
 ## GitHub as TEE
 
 GitHub Actions provides:
@@ -126,6 +148,7 @@ Fetching the workflow at that commit SHA tells you exactly what executed. No cer
 | Template | Proves | Uses Browser |
 |----------|--------|--------------|
 | `github-identity.yml` | GitHub account ownership | No |
+| `email-challenge.yml` + `email-verify.yml` | Email ownership | No |
 | `tweet-capture.yml` | Tweet authorship | Yes |
 | `file-hash.yml` | File contents at commit | No |
 
@@ -250,6 +273,7 @@ contract MyApp {
 │   │   └── HonkVerifier.sol        # Generated verifier
 │   └── examples/
 │       ├── GitHubFaucet.sol        # Faucet demo
+│       ├── EmailNFT.sol            # Email identity NFT
 │       ├── SimpleEscrow.sol        # Basic bounty
 │       └── SelfJudgingEscrow.sol   # AI-judged bounty
 │
@@ -260,6 +284,7 @@ contract MyApp {
 │
 └── docs/
     ├── faucet.md             # Faucet demo walkthrough
+    ├── email-login.md        # Email NFT walkthrough
     ├── trust-model.md        # What the proof guarantees
     └── auditing-workflows.md # Guide for verifiers
 ```
@@ -339,6 +364,7 @@ See [ESCROW.md](ESCROW.md) for the full skill file, or [examples/self-judging-bo
 
 - [ESCROW.md](ESCROW.md) — Agent escrow skill file
 - [Faucet Demo](docs/faucet.md) — Try it yourself
+- [Email Identity NFT](docs/email-login.md) — Email verification walkthrough
 - [Trust Model](docs/trust-model.md) — Security guarantees
 - [Auditing Workflows](docs/auditing-workflows.md) — For verifiers
 - [Sigstore](https://sigstore.dev/) — Attestation infrastructure
