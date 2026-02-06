@@ -1,48 +1,59 @@
 # Email Identity Verification
 #
-# Phase 2 of email verification. Triggered when someone comments on
-# an [EMAIL] issue with the challenge code.
+# Phase 2 of email verification. Triggered when a user clicks the magic
+# link in their email, which opens a new issue with title [EMAIL-VERIFY]
+# and the token as the body.
 #
-# Verifies the code matches the challenge hash, generates a certificate,
-# attests it via Sigstore, generates a ZK proof, and submits the claim
-# to mint an NFT.
+# Cross-references the original [EMAIL] issue to get challenge metadata,
+# verifies the token, generates a certificate + ZK proof, and mints NFT.
 #
 # REQUIRED SECRETS:
 #   - RELAYER_PRIVATE_KEY: funded wallet for gas
-#
-# REQUIRED LABELS:
-#   - "email-pending" must exist on the issue (added by email-challenge.yml)
 
 name: Email Verify
 
 on:
-  issue_comment:
-    types: [created]
+  issues:
+    types: [opened]
 
 permissions:
   id-token: write
   contents: read
   attestations: write
   issues: write
+  actions: read
 
 jobs:
   verify-and-claim:
-    if: |
-      contains(github.event.issue.title, '[EMAIL]') &&
-      github.event.comment.user.login != 'github-actions[bot]' &&
-      contains(join(github.event.issue.labels.*.name, ','), 'email-pending')
+    if: contains(github.event.issue.title, '[EMAIL-VERIFY]')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Parse challenge metadata from bot comment
+      - name: Parse verify issue and cross-reference original
         id: meta
         uses: actions/github-script@v7
         with:
           script: |
-            // Find the bot's challenge comment
+            const title = context.payload.issue.title;
+            const token = (context.payload.issue.body || '').trim();
+
+            // Extract original issue number from title: [EMAIL-VERIFY] #123
+            const issueMatch = title.match(/#(\d+)/);
+            if (!issueMatch) {
+              core.setFailed('Could not find original issue reference in title (expected [EMAIL-VERIFY] #NNN)');
+              return;
+            }
+            const originalIssueNum = parseInt(issueMatch[1]);
+
+            if (!token || token.length < 32) {
+              core.setFailed('Invalid or missing token in issue body');
+              return;
+            }
+
+            // Fetch the original issue's comments to find challenge metadata
             const comments = await github.rest.issues.listComments({
-              issue_number: context.issue.number,
+              issue_number: originalIssueNum,
               owner: context.repo.owner,
               repo: context.repo.repo
             });
@@ -52,11 +63,11 @@ jobs:
               c.body.includes('Challenge hash:')
             );
             if (!botComment) {
-              core.setFailed('No challenge comment found');
+              core.setFailed(`No challenge comment found on issue #${originalIssueNum}`);
               return;
             }
 
-            // Extract metadata
+            // Extract metadata from the original issue's bot comment
             const hashMatch = botComment.body.match(/Challenge hash: `([a-f0-9]{64})`/);
             const emailMatch = botComment.body.match(/Email: `(\S+@\S+\.\S+)`/);
             const recipientMatch = botComment.body.match(/Recipient: `(0x[a-fA-F0-9]{40})`/);
@@ -64,7 +75,7 @@ jobs:
             const runIdMatch = botComment.body.match(/Run ID: `(\d+)`/);
 
             if (!hashMatch || !emailMatch || !recipientMatch || !timestampMatch || !runIdMatch) {
-              core.setFailed('Could not parse challenge metadata');
+              core.setFailed('Could not parse challenge metadata from original issue');
               return;
             }
 
@@ -82,7 +93,7 @@ jobs:
               return;
             }
             if (!phase1.path.endsWith('email-challenge.yml')) {
-              core.setFailed(`Phase 1 run used wrong workflow: ${phase1.path} (expected email-challenge.yml)`);
+              core.setFailed(`Phase 1 ran wrong workflow: ${phase1.path} (expected email-challenge.yml)`);
               return;
             }
             if (phase1.head_sha !== context.sha) {
@@ -95,34 +106,36 @@ jobs:
             const challengeTime = new Date(timestampMatch[1]);
             const elapsed = Date.now() - challengeTime.getTime();
             if (elapsed > 3600000) {
-              core.setFailed('Challenge expired (>1 hour). Open a new issue.');
+              core.setFailed('Challenge expired (>1 hour). Open a new [EMAIL] issue to try again.');
               return;
             }
 
             core.setOutput('challenge_hash', hashMatch[1]);
             core.setOutput('email', emailMatch[1]);
             core.setOutput('recipient', recipientMatch[1]);
+            core.setOutput('token', token);
+            core.setOutput('original_issue', originalIssueNum.toString());
             console.log(`Email: ${emailMatch[1]}`);
             console.log(`Recipient: ${recipientMatch[1]}`);
+            console.log(`Original issue: #${originalIssueNum}`);
             console.log(`Elapsed: ${Math.round(elapsed/1000)}s`);
 
-      - name: Verify challenge code
+      - name: Verify token
         id: verify
         run: |
-          # Get the comment text (just the code, trimmed)
-          CODE=$(echo -n "$COMMENT" | tr -d '[:space:]')
-          HASH=$(echo -n "$CODE" | sha256sum | cut -d' ' -f1)
+          TOKEN=$(echo -n "$TOKEN" | tr -d '[:space:]')
+          HASH=$(echo -n "$TOKEN" | sha256sum | cut -d' ' -f1)
 
           echo "Expected: $EXPECTED_HASH"
           echo "Got:      $HASH"
 
           if [ "$HASH" != "$EXPECTED_HASH" ]; then
-            echo "::error::Challenge code does not match"
+            echo "::error::Token does not match challenge hash"
             exit 1
           fi
-          echo "Challenge verified!"
+          echo "Token verified!"
         env:
-          COMMENT: ${{ github.event.comment.body }}
+          TOKEN: ${{ steps.meta.outputs.token }}
           EXPECTED_HASH: ${{ steps.meta.outputs.challenge_hash }}
 
       - name: Generate certificate
@@ -173,7 +186,6 @@ jobs:
 
       - name: Fetch attestation bundle
         run: |
-          # Use the bundle from attest step, or download via gh CLI
           if [ -f "${{ steps.attest.outputs.bundle-path }}" ]; then
             cp "${{ steps.attest.outputs.bundle-path }}" proof/bundle.json
           else
@@ -270,7 +282,7 @@ jobs:
           echo "tx_hash=$TX_HASH" >> $GITHUB_OUTPUT
           echo "Transaction submitted: $TX_HASH"
 
-      - name: Comment success
+      - name: Comment success on original issue
         if: success()
         uses: actions/github-script@v7
         with:
@@ -278,28 +290,40 @@ jobs:
             const txHash = '${{ steps.submit.outputs.tx_hash }}';
             const email = '${{ steps.meta.outputs.email }}';
             const recipient = '${{ steps.meta.outputs.recipient }}';
+            const originalIssue = parseInt('${{ steps.meta.outputs.original_issue }}');
 
+            const successMsg = [
+              `## ✅ Email Verified — NFT Minted!`,
+              ``,
+              `**Email:** \`${email}\``,
+              `**Recipient:** \`${recipient}\``,
+              `**Transaction:** [${txHash}](https://sepolia.basescan.org/tx/${txHash})`,
+              ``,
+              `Your Email Identity NFT has been minted on Base Sepolia.`
+            ].join('\n');
+
+            // Comment on original [EMAIL] issue
             await github.rest.issues.createComment({
-              issue_number: context.issue.number,
+              issue_number: originalIssue,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: [
-                `## ✅ Email Verified — NFT Minted!`,
-                ``,
-                `**Email:** \`${email}\``,
-                `**Recipient:** \`${recipient}\``,
-                `**Transaction:** [${txHash}](https://sepolia.basescan.org/tx/${txHash})`,
-                ``,
-                `Your Email Identity NFT has been minted on Base Sepolia.`
-              ].join('\n')
+              body: successMsg
+            });
+            await github.rest.issues.update({
+              issue_number: originalIssue,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'closed',
+              labels: ['email-claimed']
             });
 
+            // Close this verify issue too
             await github.rest.issues.update({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: 'closed',
-              labels: ['email-claimed']
+              labels: ['email-verified']
             });
 
       - name: Comment failure
@@ -307,21 +331,35 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const step = '${{ steps.verify.outcome }}' === 'failure' ? 'code verification'
+            const step = '${{ steps.verify.outcome }}' === 'failure' ? 'token verification'
               : '${{ steps.submit.outcome }}' === 'failure' ? 'claim submission'
               : 'proof generation';
             const errorReason = '${{ steps.submit.outputs.error_reason }}' || 'See workflow logs';
+            const originalIssue = parseInt('${{ steps.meta.outputs.original_issue }}') || null;
 
+            const failMsg = [
+              `## ❌ Verification Failed`,
+              ``,
+              `**Step:** ${step}`,
+              `**Reason:** ${errorReason}`,
+              ``,
+              `[View logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})`
+            ].join('\n');
+
+            // Comment on this verify issue
             await github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: [
-                `## ❌ Verification Failed`,
-                ``,
-                `**Step:** ${step}`,
-                `**Reason:** ${errorReason}`,
-                ``,
-                `[View logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})`
-              ].join('\n')
+              body: failMsg
             });
+
+            // Also comment on original issue if we have it
+            if (originalIssue) {
+              await github.rest.issues.createComment({
+                issue_number: originalIssue,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: failMsg
+              });
+            }
