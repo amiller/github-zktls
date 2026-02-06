@@ -93,7 +93,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           sleep 5  # Wait for attestation to propagate
-          gh attestation download proof/certificate.json -o proof/
+          gh attestation download proof/certificate.json --repo ${{ github.repository }} -o proof/
           mv proof/*.jsonl proof/bundle.json
 
       - name: Generate ZK proof
