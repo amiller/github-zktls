@@ -107,7 +107,7 @@ Install [Rabby](https://rabby.io/) or [Rainbow](https://rainbow.me/) wallet. The
 
 Prove you own an email address — no GitHub account, no wallet signing, no Docker needed. A notary sends you a challenge code by email; you share it back; an NFT gets minted.
 
-**EmailNFT:** [`0x720000d8999423e3c47d9dd0c22f33ab3a93534b`](https://sepolia.basescan.org/address/0x720000d8999423e3c47d9dd0c22f33ab3a93534b) (Base Sepolia)
+**EmailNFT:** [`0x720000d8999423e3c47d9dd0c22f33ab3a93534b`](https://base-sepolia.blockscout.com/token/0x720000d8999423e3c47d9dd0c22f33ab3a93534b) (Base Sepolia) — [view all minted NFTs](https://base-sepolia.blockscout.com/token/0x720000d8999423e3c47d9dd0c22f33ab3a93534b)
 
 ### How to claim
 

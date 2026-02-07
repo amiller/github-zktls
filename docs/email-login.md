@@ -70,9 +70,11 @@ The workflow automatically:
 
 | | Address |
 |---|---|
-| **EmailNFT** | [`0x720000d8999423e3c47d9dd0c22f33ab3a93534b`](https://sepolia.basescan.org/address/0x720000d8999423e3c47d9dd0c22f33ab3a93534b) |
+| **EmailNFT** | [`0x720000d8999423e3c47d9dd0c22f33ab3a93534b`](https://base-sepolia.blockscout.com/token/0x720000d8999423e3c47d9dd0c22f33ab3a93534b) |
 | **SigstoreVerifier** | [`0x0Af922925AE3602b0dC23c4cFCf54FABe2F54725`](https://sepolia.basescan.org/address/0x0Af922925AE3602b0dC23c4cFCf54FABe2F54725) |
 | **Chain** | Base Sepolia (84532) |
+
+[View all minted NFTs on Blockscout](https://base-sepolia.blockscout.com/token/0x720000d8999423e3c47d9dd0c22f33ab3a93534b)
 
 ## Trust Model
 
