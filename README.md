@@ -73,18 +73,25 @@ gh workflow run github-identity.yml --ref v1.0.1 -f recipient_address=0xYOUR_ADD
 # Wait for completion, then download
 gh run watch
 gh run download -n identity-proof
+```
 
-# Submit via issue (gasless) - paste claim.json in a ```json code block
-# Or submit directly if you have gas:
-CLAIM=$(cat identity-proof/claim.json)
+**Submit your claim** (pick one):
+
+```bash
+cd identity-proof
+
+# Option 1: Submit directly with cast (no relay needed)
+CERT_HEX=0x$(xxd -p claim.json | tr -d '\n')  # NOTE: use xxd directly, not $(cat) — Bash strips trailing newlines
 cast send 0x72cd70d28284dD215257f73e1C5aD8e28847215B \
   "claim(bytes,bytes32[],bytes,string,address)" \
-  $(echo "$CLAIM" | jq -r '.proof') \
-  $(echo "$CLAIM" | jq -c '.inputs') \
-  $(echo "$CLAIM" | jq -r '.certificate | @json') \
-  $(echo "$CLAIM" | jq -r '.username') \
-  $(echo "$CLAIM" | jq -r '.recipient') \
+  "$(jq -r .proof claim.json)" \
+  "[$(jq -r '.inputs | join(",")' claim.json)]" \
+  "0x$(printf '%s' "$(jq -r .certificate claim.json)" | xxd -p | tr -d '\n')" \
+  "$(jq -r .username claim.json)" \
+  "$(jq -r .recipient claim.json)" \
   --rpc-url https://sepolia.base.org --private-key $YOUR_KEY
+
+# Option 2: Gasless relay — open an issue titled [CLAIM] and paste claim.json
 ```
 
 **Prefer local proof generation?** Uncheck "Generate ZK proof" when running the workflow, then:
@@ -95,6 +102,7 @@ cd identity-proof
 gh attestation download certificate.json -o .
 mv *.jsonl bundle.json
 docker run --rm -v $(pwd):/work ghcr.io/amiller/zkproof generate /work/bundle.json /work
+# claim.json now has everything — submit with cast send as above
 ```
 
 ### Need an ETH address?
