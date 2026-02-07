@@ -1,0 +1,21 @@
+# Stub: registers this workflow for dispatch. Run from the sealed-box branch:
+#   gh workflow run "Sealed Box" --ref sealed-box -f window_minutes=5
+# See docs/sealed-box.md for details.
+
+name: Sealed Box
+
+on:
+  workflow_dispatch:
+    inputs:
+      window_minutes:
+        description: 'Minutes to accept submissions'
+        default: '5'
+
+jobs:
+  stub:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "This is a stub. Dispatch from the sealed-box branch instead:"
+          echo "  gh workflow run 'Sealed Box' --ref sealed-box -f window_minutes=5"
+          exit 1
