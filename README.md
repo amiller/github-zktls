@@ -49,7 +49,7 @@ Claim Base Sepolia testnet ETH by proving you have a GitHub account.
    - **Important:** Select `v1.0.2` tag from the "Use workflow from" dropdown
    - Enter your ETH address (see below if you need one)
    - Leave "Generate ZK proof" checked (default)
-   - Click "Run workflow" — takes ~5 min
+   - Click "Run workflow" — takes ~1 min
 5. **Download the artifact** — Click the completed run → download `identity-proof`
 6. **Claim your ETH:**
    - **No gas?** [Open an issue](https://github.com/amiller/github-zktls/issues/new) titled `[CLAIM]` and paste the contents of `claim.json` in a ```json code block. We'll relay it for you.
@@ -232,7 +232,14 @@ The circuit verifies:
 2. **Attestation signature** — Leaf cert signed the DSSE envelope (P-256 ECDSA)
 3. **Claim extraction** — Extracts repo hash, commit SHA, artifact hash
 
-The proof is ~10KB. Verification is a single contract call.
+| Metric | Value |
+|--------|-------|
+| Proof generation | **28s** (ubuntu-latest runner) |
+| Peak RAM | **1.5 GB** |
+| Proof size | **10,560 bytes** |
+| On-chain verification | ~300k gas |
+
+Verification is a single contract call.
 
 ```solidity
 ISigstoreVerifier.Attestation memory att = verifier.verifyAndDecode(proof, inputs);
