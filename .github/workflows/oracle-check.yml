@@ -77,11 +77,25 @@ jobs:
             node check-forum.js "$TOPIC_ID" "$KEYWORD"
           fi
           
-          # Extract result for GitHub output
-          RESULT=$(jq -r '.found' oracle-result.json)
-          echo "found=$RESULT" >> $GITHUB_OUTPUT
+          # Check if settleable
+          SETTLEABLE=$(jq -r '.settleable' oracle-result.json)
+          RESULT=$(jq -r '.result' oracle-result.json)
+          FOUND=$(jq -r '.found' oracle-result.json)
           
-          echo "Oracle result: $RESULT"
+          if [ "$SETTLEABLE" != "true" ]; then
+            echo "⏳ Cannot settle: First comment does not exist yet"
+            echo "Wait for first comment to be posted before settling market"
+            echo "settleable=false" >> $GITHUB_OUTPUT
+            echo "result=NO_COMMENTS" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "✅ Settleable! First comment exists."
+          echo "settleable=true" >> $GITHUB_OUTPUT
+          echo "result=$RESULT" >> $GITHUB_OUTPUT
+          echo "found=$FOUND" >> $GITHUB_OUTPUT
+          
+          echo "Oracle result: $RESULT (found=$FOUND)"
       
       - name: Generate attestation artifact
         run: |
@@ -124,7 +138,24 @@ jobs:
           echo ""
           echo "**Topic ID:** $TOPIC_ID"
           echo "**Keyword:** $KEYWORD"
-          echo "**Found:** ${{ steps.oracle.outputs.found }}"
+          echo "**Result:** ${{ steps.oracle.outputs.result }}"
+          echo "**Settleable:** ${{ steps.oracle.outputs.settleable }}"
+          
+          if [ "${{ steps.oracle.outputs.settleable }}" = "true" ]; then
+            echo "**Found:** ${{ steps.oracle.outputs.found }}"
+            echo ""
+            echo "✅ **Can settle market**"
+            if [ "${{ steps.oracle.outputs.found }}" = "true" ]; then
+              echo "   Outcome: YES wins"
+            else
+              echo "   Outcome: NO wins"
+            fi
+          else
+            echo ""
+            echo "⏳ **Cannot settle yet** - First comment does not exist"
+            echo "   Wait for first comment before settling market"
+          fi
+          
           echo ""
           echo "**Commit SHA:** ${{ github.sha }}"
           echo "**Run ID:** ${{ github.run_id }}"

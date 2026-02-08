@@ -69,13 +69,15 @@ async function main() {
     const firstComment = extractFirstComment(topic);
     
     if (!firstComment) {
-      console.log('\n❌ No comments yet');
+      console.log('\n⏳ NO COMMENTS YET (cannot settle)');
       console.log(JSON.stringify({
         result: 'NO_COMMENTS',
-        found: false,
+        found: null,  // null = indeterminate (not true, not false, not yet known)
+        settleable: false,
         topic_id: topicId,
         keyword: keyword,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        message: 'First comment has not been posted yet. Cannot settle market.'
       }, null, 2));
       process.exit(0);
     }
@@ -95,6 +97,7 @@ async function main() {
     const result = {
       result: found ? 'FOUND' : 'NOT_FOUND',
       found: found,
+      settleable: true,  // First comment exists, can settle
       topic_id: topicId,
       topic_title: topic.title,
       keyword: keyword,
@@ -105,7 +108,7 @@ async function main() {
         excerpt: firstComment.cooked.substring(0, 200) // First 200 chars
       },
       timestamp: new Date().toISOString(),
-      oracle_version: '1.0.0'
+      oracle_version: '1.1.0'
     };
     
     console.log('\nOracle Result:');

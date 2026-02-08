@@ -1,156 +1,16 @@
 {
-  "result": "FOUND",
-  "found": true,
+  "result": "NOT_FOUND",
+  "found": false,
+  "settleable": true,
   "topic_id": "27119",
   "topic_title": "ERC-8109: Diamonds, Simplified",
-  "keyword": "diamond",
-  "total_matches": 17,
-  "first_match": {
-    "position": 1,
-    "comment_number": 2,
+  "keyword": "radicle",
+  "first_comment": {
     "id": 65572,
     "username": "vitali_grabovski",
     "created_at": "2025-12-12T14:26:22.217Z",
     "excerpt": "<p>Hello <a class=\"mention\" href=\"/u/mudgen\">@mudgen</a>,</p>\n<p>I like the simplification and the fact that the diamond-pattern spirit and overall diamond idea are still present. Almost all of the su"
   },
-  "all_matches": [
-    {
-      "position": 1,
-      "comment_number": 2,
-      "id": 65572,
-      "username": "vitali_grabovski",
-      "created_at": "2025-12-12T14:26:22.217Z",
-      "excerpt": "<p>Hello <a class=\"mention\" href=\"/u/mudgen\">@mudgen</a>,</p>\n<p>I like the simplification and the fact that the diamond-pattern spirit and overall diamond idea are still present. Almost all of the su"
-    },
-    {
-      "position": 2,
-      "comment_number": 3,
-      "id": 65587,
-      "username": "kyle",
-      "created_at": "2025-12-12T22:49:13.555Z",
-      "excerpt": "<p>Having separate events for Added/Replaced/Removed is a great addition.  That would make my code much cleaner, except…</p>\n<blockquote>\n<p>To reconstruct the complete upgrade history will require re"
-    },
-    {
-      "position": 3,
-      "comment_number": 4,
-      "id": 65591,
-      "username": "mudgen",
-      "created_at": "2025-12-13T01:11:36.234Z",
-      "excerpt": "<p><a class=\"mention\" href=\"/u/vitali_grabovski\">@vitali_grabovski</a></p>\n<blockquote>\n<p>I like the simplification and the fact that the diamond-pattern spirit and overall diamond idea are still pre"
-    },
-    {
-      "position": 4,
-      "comment_number": 5,
-      "id": 65592,
-      "username": "mudgen",
-      "created_at": "2025-12-13T01:33:23.721Z",
-      "excerpt": "<p>Hi <a class=\"mention\" href=\"/u/kyle\">@kyle</a></p>\n<blockquote>\n<p>Having separate events for Added/Replaced/Removed is a great addition. That would make my code much cleaner, except…</p>\n</blockqu"
-    },
-    {
-      "position": 5,
-      "comment_number": 6,
-      "id": 65606,
-      "username": "DavidKim",
-      "created_at": "2025-12-13T15:39:47.895Z",
-      "excerpt": "<p>Interesting and happy to see the Diamond further heading towards a more intuitive developer experience!</p>\n<p>As an engineer that has used Diamond in many smart contracts, I understand the objecti"
-    },
-    {
-      "position": 6,
-      "comment_number": 7,
-      "id": 65609,
-      "username": "mudgen",
-      "created_at": "2025-12-13T16:58:02.746Z",
-      "excerpt": "<p><a class=\"mention\" href=\"/u/davidkim\">@DavidKim</a></p>\n<aside class=\"quote no-group\" data-username=\"DavidKim\" data-post=\"6\" data-topic=\"27119\">\n<div class=\"title\">\n<div class=\"quote-controls\"></di"
-    },
-    {
-      "position": 7,
-      "comment_number": 8,
-      "id": 65620,
-      "username": "Vagabond",
-      "created_at": "2025-12-14T06:58:40.351Z",
-      "excerpt": "<p>Hi, I think this is a great proposal.<br>\nI’d like to add some inputs from an implementation perspective.</p>\n<p>For migrating an existing ERC-2535 diamond to this new standard, a multisend upgrade"
-    },
-    {
-      "position": 8,
-      "comment_number": 9,
-      "id": 65623,
-      "username": "mudgen",
-      "created_at": "2025-12-14T11:31:53.633Z",
-      "excerpt": "<p><a class=\"mention\" href=\"/u/vagabond\">@Vagabond</a> Excellent perspective and clarity. I really appreciate comments and feedback like yours.</p>\n<p>Yes, the loupe/introspection functions from ERC-2"
-    },
-    {
-      "position": 9,
-      "comment_number": 10,
-      "id": 65627,
-      "username": "Vagabond",
-      "created_at": "2025-12-14T16:05:31.257Z",
-      "excerpt": "<aside class=\"quote no-group\" data-username=\"mudgen\" data-post=\"9\" data-topic=\"27119\">\n<div class=\"title\">\n<div class=\"quote-controls\"></div>\n<img alt=\"\" width=\"24\" height=\"24\" src=\"https://ethereum-m"
-    },
-    {
-      "position": 10,
-      "comment_number": 11,
-      "id": 65628,
-      "username": "vitali_grabovski",
-      "created_at": "2025-12-14T16:26:56.985Z",
-      "excerpt": "<aside class=\"quote no-group\" data-username=\"kyle\" data-post=\"3\" data-topic=\"27119\">\n<div class=\"title\">\n<div class=\"quote-controls\"></div>\n<img alt=\"\" width=\"24\" height=\"24\" src=\"https://ethereum-mag"
-    },
-    {
-      "position": 11,
-      "comment_number": 12,
-      "id": 65640,
-      "username": "ahmadnajari56-eng",
-      "created_at": "2025-12-15T03:33:48.677Z",
-      "excerpt": "<p>“This is a necessary and well-targeted proposal. The approach of using separate, indexed events (<code>DiamondFunctionAdded/Replaced/Removed</code> ) fundamentally solves the key tracking and query"
-    },
-    {
-      "position": 12,
-      "comment_number": 13,
-      "id": 65641,
-      "username": "kavsky",
-      "created_at": "2025-12-15T03:34:04.051Z",
-      "excerpt": "<p>Hi <a class=\"mention\" href=\"/u/mudgen\">@mudgen</a>,</p>\n<p>We have been using a variant of ERC-2535 in production for almost 3 years. Over that time we have done hundreds of diamond cuts and built "
-    },
-    {
-      "position": 13,
-      "comment_number": 14,
-      "id": 65670,
-      "username": "mudgen",
-      "created_at": "2025-12-15T15:44:41.960Z",
-      "excerpt": "<p><a class=\"mention\" href=\"/u/kavsky\">@kavsky</a></p>\n<aside class=\"quote no-group\" data-username=\"kavsky\" data-post=\"13\" data-topic=\"27119\">\n<div class=\"title\">\n<div class=\"quote-controls\"></div>\n<i"
-    },
-    {
-      "position": 14,
-      "comment_number": 16,
-      "id": 65689,
-      "username": "mudgen",
-      "created_at": "2025-12-16T00:25:38.866Z",
-      "excerpt": "<aside class=\"quote no-group\" data-username=\"ahmadnajari56-eng\" data-post=\"12\" data-topic=\"27119\">\n<div class=\"title\">\n<div class=\"quote-controls\"></div>\n<img alt=\"\" width=\"24\" height=\"24\" src=\"https:"
-    },
-    {
-      "position": 15,
-      "comment_number": 17,
-      "id": 65725,
-      "username": "CypherVae",
-      "created_at": "2025-12-16T18:52:26.657Z",
-      "excerpt": "<p>Hey there <a class=\"mention\" href=\"/u/mudgen\">@mudgen</a>, I saw your tweet re the trademark dispute and have a few thoughts. I had a look at the cease and desist letter LOL and it seemed to me tha"
-    },
-    {
-      "position": 16,
-      "comment_number": 19,
-      "id": 65990,
-      "username": "maxnorm",
-      "created_at": "2025-12-24T22:54:32.299Z",
-      "excerpt": "<p>Great work on the proposition Nick! <a href=\"https://github.com/mudgen/ERCs/blob/master/ERCS/erc-8109.md\" rel=\"noopener nofollow ugc\">See the draft here</a></p>\n<p>This simplified version will ease"
-    },
-    {
-      "position": 17,
-      "comment_number": 21,
-      "id": 66050,
-      "username": "mudgen",
-      "created_at": "2025-12-28T16:58:23.226Z",
-      "excerpt": "<aside class=\"quote no-group\" data-username=\"maxnorm\" data-post=\"19\" data-topic=\"27119\" data-full=\"true\">\n<div class=\"title\">\n<div class=\"quote-controls\"></div>\n<img alt=\"\" width=\"24\" height=\"24\" src="
-    }
-  ],
-  "timestamp": "2026-02-08T12:08:39.875Z",
-  "oracle_version": "2.0.0-any-comment"
+  "timestamp": "2026-02-08T12:20:12.184Z",
+  "oracle_version": "1.1.0"
 }
