@@ -23,9 +23,8 @@ on:
       max_comments:
         description: 'Max comments to check (for "any" type)'
         required: false
-  # Can also trigger on push for testing
-  push:
-    branches: [ main ]
+        default: '100'
+        type: string
 
 permissions:
   contents: read
@@ -65,6 +64,7 @@ jobs:
       - name: Run oracle check
         id: oracle
         run: |
+          cd oracle
           # Run appropriate oracle based on type
           if [ "$ORACLE_TYPE" = "any" ]; then
             echo "Running ANY comment oracle (max $MAX_COMMENTS)"
@@ -96,6 +96,7 @@ jobs:
       
       - name: Generate attestation artifact
         run: |
+          cd oracle
           # Create attestation bundle
           mkdir -p attestation
           cp oracle-result.json attestation/
@@ -123,15 +124,15 @@ jobs:
       - name: Attest oracle result
         uses: actions/attest-build-provenance@v2
         with:
-          subject-path: 'oracle-result.json'
+          subject-path: 'oracle/oracle-result.json'
       
       - name: Upload result artifacts
         uses: actions/upload-artifact@v4
         with:
           name: oracle-result-${{ github.run_number }}
           path: |
-            oracle-result.json
-            attestation/
+            oracle/oracle-result.json
+            oracle/attestation/
       
       - name: Comment result
         run: |
