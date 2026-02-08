@@ -1,0 +1,134 @@
+# Benchmark: ZK Proof Generation
+#
+# Times the full proof pipeline and reports peak RAM usage.
+# Creates its own attestation, then runs the Docker prover.
+#
+# Run manually from Actions tab. Results posted as workflow summary.
+
+name: Benchmark
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+  attestations: write
+  packages: read
+
+env:
+  PROVER_DIGEST: sha256:7f40b6ebdd2f86fe050aa950f71b386b9cd77d146dd4a20d29e09aa9efe47e11
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate test certificate
+        run: |
+          mkdir -p proof
+          cat > proof/certificate.json << EOF
+          {
+            "type": "github-identity",
+            "github_actor": "${{ github.actor }}",
+            "github_repository": "${{ github.repository }}",
+            "recipient_address": "0x0000000000000000000000000000000000000000",
+            "faucet_address": "0x0000000000000000000000000000000000000000",
+            "chain_id": 84532,
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "workflow_run": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          }
+          EOF
+          echo "Certificate:" && cat proof/certificate.json
+
+      - name: Attest
+        id: attest
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: proof/certificate.json
+
+      - name: Copy attestation bundle
+        run: cp ${{ steps.attest.outputs.bundle-path }} proof/bundle.json
+
+      - name: Run proof generation with timing
+        run: |
+          REGISTRY="${{ vars.PROVER_REGISTRY || 'ghcr.io/amiller/zkproof' }}"
+          IMAGE="${REGISTRY}@${PROVER_DIGEST}"
+
+          echo "Pulling prover image..."
+          PULL_START=$(date +%s%N)
+          docker pull "$IMAGE"
+          PULL_END=$(date +%s%N)
+          echo "pull_ms=$(( (PULL_END - PULL_START) / 1000000 ))" >> "$GITHUB_ENV"
+
+          # RAM watermark monitor: polls docker stats, tracks peak MB
+          CONTAINER_NAME="zkproof-bench-$$"
+          PEAK_FILE=$(mktemp)
+          echo "0" > "$PEAK_FILE"
+          (
+            while true; do
+              RAW=$(docker stats --no-stream --format '{{.MemUsage}}' "$CONTAINER_NAME" 2>/dev/null || true)
+              if [ -n "$RAW" ]; then
+                MB=$(python3 -c "
+          import re, sys
+          m = re.search(r'([\d.]+)\s*(GiB|MiB|KiB)', '''$RAW''')
+          if not m: sys.exit()
+          v, u = float(m[1]), m[2]
+          print(int(v * 1024) if u == 'GiB' else int(v) if u == 'MiB' else max(1, int(v / 1024)))" 2>/dev/null || true)
+                if [ -n "$MB" ]; then
+                  PREV=$(cat "$PEAK_FILE")
+                  [ "$MB" -gt "$PREV" ] 2>/dev/null && echo "$MB" > "$PEAK_FILE"
+                fi
+              fi
+              sleep 0.5
+            done
+          ) &
+          MONITOR_PID=$!
+
+          echo "Starting proof generation..."
+          PROVE_START=$(date +%s%N)
+          docker run --rm --name "$CONTAINER_NAME" \
+            -v ${{ github.workspace }}/proof:/work \
+            "$IMAGE" generate /work/bundle.json /work
+          PROVE_END=$(date +%s%N)
+          echo "prove_ms=$(( (PROVE_END - PROVE_START) / 1000000 ))" >> "$GITHUB_ENV"
+
+          # Give monitor one last read after container exits
+          sleep 1
+          kill $MONITOR_PID 2>/dev/null || true
+          echo "peak_ram_mb=$(cat "$PEAK_FILE")" >> "$GITHUB_ENV"
+          rm -f "$PEAK_FILE"
+
+          ls -la proof/proof.bin proof/inputs.bin proof/claim.json
+          echo "proof_size=$(stat -c%s proof/proof.bin)" >> "$GITHUB_ENV"
+
+      - name: Post results
+        run: |
+          PROVE_SEC=$(python3 -c "print(f'{${{ env.prove_ms }} / 1000:.1f}')")
+          PULL_SEC=$(python3 -c "print(f'{${{ env.pull_ms }} / 1000:.1f}')")
+          {
+            echo "## Benchmark Results"
+            echo ""
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            echo "| **Proof generation** | ${PROVE_SEC}s |"
+            echo "| **Docker pull** | ${PULL_SEC}s |"
+            echo "| **Peak RAM** | ${{ env.peak_ram_mb }} MB |"
+            echo "| **Proof size** | ${{ env.proof_size }} bytes |"
+            echo "| **Runner** | \`ubuntu-latest\` |"
+            echo "| **Prover digest** | \`${PROVER_DIGEST:0:16}...\` |"
+            echo "| **Commit** | \`${{ github.sha }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "=== BENCHMARK RESULTS ==="
+          echo "Proof generation: ${PROVE_SEC}s"
+          echo "Docker pull: ${PULL_SEC}s"
+          echo "Peak RAM: ${{ env.peak_ram_mb }} MB"
+          echo "Proof size: ${{ env.proof_size }} bytes"
+
+      - name: Upload proof artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-proof
+          path: proof/
