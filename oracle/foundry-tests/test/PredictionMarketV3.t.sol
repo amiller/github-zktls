@@ -55,7 +55,6 @@ contract PredictionMarketV3Test is Test {
     address public settler = address(0x3);
     
     uint256 constant DEADLINE = 1000000;
-    string constant REPO = "claw-tee-dah/github-zktls";
     bytes20 constant COMMIT_SHA = bytes20(uint160(0xabcdef123456));
     
     function setUp() public {
@@ -77,7 +76,6 @@ contract PredictionMarketV3Test is Test {
             "12345",
             "radicle",
             "first",
-            REPO,
             COMMIT_SHA,
             DEADLINE
         );
@@ -87,7 +85,6 @@ contract PredictionMarketV3Test is Test {
         (
             string memory description,
             bytes32 conditionHash,
-            bytes32 repoHash,
             bytes20 oracleCommitSha,
             uint256 deadline,
             bool settled,
@@ -116,7 +113,6 @@ contract PredictionMarketV3Test is Test {
             "12345",
             "radicle",
             "first",
-            REPO,
             COMMIT_SHA,
             DEADLINE
         );
@@ -131,7 +127,6 @@ contract PredictionMarketV3Test is Test {
             "12345",
             "radicle",
             "first",
-            REPO,
             COMMIT_SHA,
             DEADLINE
         );
@@ -144,7 +139,7 @@ contract PredictionMarketV3Test is Test {
         assertEq(noShares, 0);
         assertFalse(claimed);
         
-        (,,,,,,,uint256 yesPool,) = market.getMarket(marketId);
+        (,,,,,uint256 yesPool,) = market.getMarket(marketId);
         assertEq(yesPool, 1 ether);
     }
     
@@ -155,7 +150,6 @@ contract PredictionMarketV3Test is Test {
             "12345",
             "radicle",
             "first",
-            REPO,
             COMMIT_SHA,
             DEADLINE
         );
@@ -168,7 +162,7 @@ contract PredictionMarketV3Test is Test {
         assertEq(noShares, 2 ether);
         assertFalse(claimed);
         
-        (,,,,,,,,uint256 noPool) = market.getMarket(marketId);
+        (,,,,,,,uint256 noPool) = market.getMarket(marketId);
         assertEq(noPool, 2 ether);
     }
     
@@ -179,7 +173,6 @@ contract PredictionMarketV3Test is Test {
             "12345",
             "radicle",
             "first",
-            REPO,
             COMMIT_SHA,
             DEADLINE
         );
@@ -196,7 +189,6 @@ contract PredictionMarketV3Test is Test {
             "12345",
             "radicle",
             "first",
-            REPO,
             COMMIT_SHA,
             DEADLINE
         );
@@ -218,7 +210,6 @@ contract PredictionMarketV3Test is Test {
             "12345",
             "radicle",
             "first",
-            REPO,
             COMMIT_SHA,
             DEADLINE
         );
@@ -253,7 +244,7 @@ contract PredictionMarketV3Test is Test {
             "first"
         );
         
-        (,,,,,bool settled, bool result,,) = market.getMarket(marketId);
+        (,,,,bool settled, bool result,,) = market.getMarket(marketId);
         assertTrue(settled);
         assertTrue(result); // YES wins (found=true)
     }
@@ -266,7 +257,6 @@ contract PredictionMarketV3Test is Test {
             "12345",
             "radicle",
             "first",
-            REPO,
             COMMIT_SHA,
             DEADLINE
         );
@@ -305,7 +295,6 @@ contract PredictionMarketV3Test is Test {
             "12345",
             "radicle",
             "first",
-            REPO,
             COMMIT_SHA,
             DEADLINE
         );
@@ -348,7 +337,6 @@ contract PredictionMarketV3Test is Test {
             "12345",
             "radicle",
             "first",
-            REPO,
             COMMIT_SHA,
             DEADLINE
         );
@@ -383,48 +371,6 @@ contract PredictionMarketV3Test is Test {
         );
     }
     
-    function testSettleRevertsIfWrongRepo() public {
-        vm.warp(100);
-        
-        uint256 marketId = market.createMarket(
-            "Test",
-            "12345",
-            "radicle",
-            "first",
-            REPO,
-            COMMIT_SHA,
-            DEADLINE
-        );
-        
-        vm.prank(alice);
-        market.bet{value: 1 ether}(marketId, true);
-        
-        vm.warp(DEADLINE + 1);
-        
-        bytes memory certificate = bytes(
-            '{"settleable": true, "found": true, "result": "FOUND", '
-            '"topic_id": "12345", "keyword": "radicle", "oracle_type": "first"}'
-        );
-        
-        // Wrong repo hash
-        mockVerifier.setAttestation(
-            sha256(certificate),
-            keccak256(bytes("attacker/fake-repo")),
-            COMMIT_SHA
-        );
-        
-        vm.prank(settler);
-        vm.expectRevert(PredictionMarket.WrongRepo.selector);
-        market.settle(
-            marketId,
-            "",
-            new bytes32[](0),
-            certificate,
-            "12345",
-            "radicle",
-            "first"
-        );
-    }
     
     function testSettleRevertsIfParameterMismatch() public {
         vm.warp(100);
@@ -434,7 +380,6 @@ contract PredictionMarketV3Test is Test {
             "12345",
             "radicle",
             "first",
-            REPO,
             COMMIT_SHA,
             DEADLINE
         );
@@ -477,7 +422,6 @@ contract PredictionMarketV3Test is Test {
             "12345",
             "radicle",
             "first",
-            REPO,
             COMMIT_SHA,
             DEADLINE
         );
@@ -520,7 +464,6 @@ contract PredictionMarketV3Test is Test {
             "12345",
             "radicle",
             "first",
-            REPO,
             COMMIT_SHA,
             DEADLINE
         );
@@ -553,7 +496,7 @@ contract PredictionMarketV3Test is Test {
             "first"
         );
         
-        (,,,,,bool settled, bool result,,) = market.getMarket(marketId);
+        (,,,,bool settled, bool result,,) = market.getMarket(marketId);
         assertTrue(settled);
         assertTrue(result); // YES wins
     }
@@ -566,7 +509,6 @@ contract PredictionMarketV3Test is Test {
             "12345",
             "radicle",
             "first",
-            REPO,
             COMMIT_SHA,
             DEADLINE
         );
@@ -599,7 +541,7 @@ contract PredictionMarketV3Test is Test {
             "first"
         );
         
-        (,,,,,bool settled, bool result,,) = market.getMarket(marketId);
+        (,,,,bool settled, bool result,,) = market.getMarket(marketId);
         assertTrue(settled);
         assertFalse(result); // NO wins
     }
@@ -614,7 +556,6 @@ contract PredictionMarketV3Test is Test {
             "12345",
             "radicle",
             "first",
-            REPO,
             COMMIT_SHA,
             DEADLINE
         );
@@ -667,7 +608,6 @@ contract PredictionMarketV3Test is Test {
             "12345",
             "radicle",
             "first",
-            REPO,
             COMMIT_SHA,
             DEADLINE
         );
@@ -731,7 +671,6 @@ contract PredictionMarketV3Test is Test {
             "12345",
             "radicle",
             "first",
-            REPO,
             COMMIT_SHA,
             DEADLINE
         );
@@ -777,7 +716,6 @@ contract PredictionMarketV3Test is Test {
             "12345",
             "radicle",
             "first",
-            REPO,
             COMMIT_SHA,
             DEADLINE
         );
@@ -827,7 +765,6 @@ contract PredictionMarketV3Test is Test {
             "12345",
             "radicle",
             "first",
-            REPO,
             COMMIT_SHA,
             DEADLINE
         );
@@ -857,7 +794,6 @@ contract PredictionMarketV3Test is Test {
             "12345",
             "radicle",
             "first",
-            REPO,
             COMMIT_SHA,
             DEADLINE
         );
@@ -883,7 +819,6 @@ contract PredictionMarketV3Test is Test {
             "12345",
             "radicle",
             "first",
-            REPO,
             COMMIT_SHA,
             DEADLINE
         );
@@ -917,7 +852,7 @@ contract PredictionMarketV3Test is Test {
             "first"
         );
         
-        (,,,,,bool settled,,,) = market.getMarket(marketId);
+        (,,,,bool settled,,,) = market.getMarket(marketId);
         assertTrue(settled);
     }
     
@@ -929,7 +864,6 @@ contract PredictionMarketV3Test is Test {
             "12345",
             "radicle",
             "first",
-            REPO,
             COMMIT_SHA,
             DEADLINE
         );
@@ -944,15 +878,15 @@ contract PredictionMarketV3Test is Test {
             '"topic_id": "12345", "keyword": "radicle", "oracle_type": "first"}'
         );
         
-        // Attacker tries to settle with wrong attestation
+        // Attacker tries to settle with wrong commit SHA
         mockVerifier.setAttestation(
             sha256(certificate),
-            keccak256(bytes("attacker/repo")),
-            COMMIT_SHA
+            bytes32(0), // repoHash doesn't matter anymore
+            bytes20(uint160(0xBADC0FFEE)) // Wrong commit!
         );
         
         vm.prank(settler);
-        vm.expectRevert(PredictionMarket.WrongRepo.selector);
+        vm.expectRevert(PredictionMarket.WrongCommit.selector);
         market.settle(
             marketId,
             "",

@@ -32,7 +32,6 @@ contract PredictionMarket {
     struct Market {
         string description;
         bytes32 conditionHash;      // keccak256(topicId, keyword, oracleType)
-        bytes32 repoHash;            // keccak256(oracleRepo) - e.g., "claw-tee-dah/github-zktls"
         bytes20 oracleCommitSha;     // Required commit SHA for oracle
         uint256 deadline;            // Betting closes at this time
         bool settled;
@@ -57,7 +56,6 @@ contract PredictionMarket {
         uint256 indexed marketId,
         string description,
         bytes32 conditionHash,
-        string oracleRepo,
         bytes20 oracleCommitSha,
         uint256 deadline
     );
@@ -93,7 +91,6 @@ contract PredictionMarket {
     error InvalidProof();
     error CertificateMismatch();
     error WrongCommit();
-    error WrongRepo();
     error ParameterMismatch();
     error NotSettleable();
     error NoWinners();
@@ -115,8 +112,7 @@ contract PredictionMarket {
      * @param topicId Ethereum Magicians topic ID
      * @param keyword Keyword to search for
      * @param oracleType "first" or "any" comment
-     * @param oracleRepo GitHub repo running oracle (e.g., "claw-tee-dah/github-zktls")
-     * @param oracleCommitSha Exact commit SHA oracle must run from
+     * @param oracleCommitSha Exact commit SHA oracle must run from (globally unique)
      * @param deadline Unix timestamp when betting closes
      */
     function createMarket(
@@ -124,7 +120,6 @@ contract PredictionMarket {
         string memory topicId,
         string memory keyword,
         string memory oracleType,
-        string memory oracleRepo,
         bytes20 oracleCommitSha,
         uint256 deadline
     ) external returns (uint256) {
@@ -132,13 +127,11 @@ contract PredictionMarket {
         
         // Bind market to exact oracle parameters
         bytes32 conditionHash = keccak256(abi.encode(topicId, keyword, oracleType));
-        bytes32 repoHash = keccak256(bytes(oracleRepo));
         
         uint256 marketId = marketCount++;
         markets[marketId] = Market({
             description: description,
             conditionHash: conditionHash,
-            repoHash: repoHash,
             oracleCommitSha: oracleCommitSha,
             deadline: deadline,
             settled: false,
@@ -149,7 +142,7 @@ contract PredictionMarket {
             totalNoShares: 0
         });
         
-        emit MarketCreated(marketId, description, conditionHash, oracleRepo, oracleCommitSha, deadline);
+        emit MarketCreated(marketId, description, conditionHash, oracleCommitSha, deadline);
         return marketId;
     }
     
@@ -223,7 +216,7 @@ contract PredictionMarket {
         bytes32 providedHash = keccak256(abi.encode(topicId, keyword, oracleType));
         if (providedHash != market.conditionHash) revert ParameterMismatch();
         
-        // === CRYPTOGRAPHIC VERIFICATION (the whole point!) ===
+        // === CRYPTOGRAPHIC VERIFICATION (GitHubFaucet pattern) ===
         
         // 1. Verify ZK proof of Sigstore attestation
         ISigstoreVerifier.Attestation memory att = verifier.verifyAndDecode(proof, publicInputs);
@@ -231,12 +224,10 @@ contract PredictionMarket {
         // 2. Check certificate hash matches attestation
         if (sha256(certificate) != att.artifactHash) revert CertificateMismatch();
         
-        // 3. Check commit SHA matches market requirement
-        if (att.commitSha != market.oracleCommitSha) revert WrongCommit();
-        
-        // 4. Check repo hash matches market requirement
-        // Note: att.repoHash is keccak256(repoName) from the proof
-        if (att.repoHash != market.repoHash) revert WrongRepo();
+        // 3. Check commit SHA matches market requirement (commit is globally unique)
+        if (market.oracleCommitSha != bytes20(0) && att.commitSha != market.oracleCommitSha) {
+            revert WrongCommit();
+        }
         
         // === PARSE CERTIFICATE ===
         
@@ -306,7 +297,6 @@ contract PredictionMarket {
     function getMarket(uint256 marketId) external view returns (
         string memory description,
         bytes32 conditionHash,
-        bytes32 repoHash,
         bytes20 oracleCommitSha,
         uint256 deadline,
         bool settled,
@@ -318,7 +308,6 @@ contract PredictionMarket {
         return (
             market.description,
             market.conditionHash,
-            market.repoHash,
             market.oracleCommitSha,
             market.deadline,
             market.settled,
