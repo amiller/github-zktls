@@ -23,9 +23,6 @@ on:
       max_comments:
         description: 'Max comments to check (for "any" type)'
         required: false
-        default: '100'
-        type: string
-  
   # Can also trigger on push for testing
   push:
     branches: [ main ]
