@@ -1,0 +1,132 @@
+name: Prediction Market Oracle
+
+on:
+  # Manual trigger with parameters
+  workflow_dispatch:
+    inputs:
+      topic_id:
+        description: 'Ethereum Magicians topic ID'
+        required: true
+        type: string
+      keyword:
+        description: 'Keyword to search for in first comment'
+        required: true
+        type: string
+      oracle_type:
+        description: 'Oracle type (first or any)'
+        required: false
+        default: 'first'
+        type: choice
+        options:
+          - first
+          - any
+      max_comments:
+        description: 'Max comments to check (for "any" type)'
+        required: false
+        default: '100'
+        type: string
+  
+  # Can also trigger on push for testing
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  id-token: write  # Required for Sigstore attestation
+  attestations: write
+
+jobs:
+  check-forum:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Set topic parameters
+        id: params
+        run: |
+          # Use workflow inputs if manual trigger, otherwise use defaults
+          if [ -n "${{ github.event.inputs.topic_id }}" ]; then
+            echo "TOPIC_ID=${{ github.event.inputs.topic_id }}" >> $GITHUB_ENV
+            echo "KEYWORD=${{ github.event.inputs.keyword }}" >> $GITHUB_ENV
+            echo "ORACLE_TYPE=${{ github.event.inputs.oracle_type || 'first' }}" >> $GITHUB_ENV
+            echo "MAX_COMMENTS=${{ github.event.inputs.max_comments || '100' }}" >> $GITHUB_ENV
+          else
+            # Default: Check for a configured topic (can be set in repo variables)
+            echo "TOPIC_ID=${{ vars.DEFAULT_TOPIC_ID || '27680' }}" >> $GITHUB_ENV
+            echo "KEYWORD=${{ vars.DEFAULT_KEYWORD || 'radicle' }}" >> $GITHUB_ENV
+            echo "ORACLE_TYPE=${{ vars.ORACLE_TYPE || 'first' }}" >> $GITHUB_ENV
+            echo "MAX_COMMENTS=${{ vars.MAX_COMMENTS || '100' }}" >> $GITHUB_ENV
+          fi
+      
+      - name: Run oracle check
+        id: oracle
+        run: |
+          # Run appropriate oracle based on type
+          if [ "$ORACLE_TYPE" = "any" ]; then
+            echo "Running ANY comment oracle (max $MAX_COMMENTS)"
+            node check-forum-any.js "$TOPIC_ID" "$KEYWORD" "$MAX_COMMENTS"
+          else
+            echo "Running FIRST comment oracle"
+            node check-forum.js "$TOPIC_ID" "$KEYWORD"
+          fi
+          
+          # Extract result for GitHub output
+          RESULT=$(jq -r '.found' oracle-result.json)
+          echo "found=$RESULT" >> $GITHUB_OUTPUT
+          
+          echo "Oracle result: $RESULT"
+      
+      - name: Generate attestation artifact
+        run: |
+          # Create attestation bundle
+          mkdir -p attestation
+          cp oracle-result.json attestation/
+          
+          # Add metadata
+          cat > attestation/metadata.json <<EOF
+          {
+            "workflow": "${{ github.workflow }}",
+            "run_id": "${{ github.run_id }}",
+            "run_number": "${{ github.run_number }}",
+            "commit_sha": "${{ github.sha }}",
+            "repository": "${{ github.repository }}",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "result_found": ${{ steps.oracle.outputs.found }}
+          }
+          EOF
+          
+          # Create hash of result for attestation
+          cat oracle-result.json | sha256sum | cut -d' ' -f1 > attestation/result-hash.txt
+      
+      - name: Attest oracle result
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: 'oracle-result.json'
+      
+      - name: Upload result artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: oracle-result-${{ github.run_number }}
+          path: |
+            oracle-result.json
+            attestation/
+      
+      - name: Comment result
+        run: |
+          echo "### Oracle Result 🔮"
+          echo ""
+          echo "**Topic ID:** $TOPIC_ID"
+          echo "**Keyword:** $KEYWORD"
+          echo "**Found:** ${{ steps.oracle.outputs.found }}"
+          echo ""
+          echo "**Commit SHA:** ${{ github.sha }}"
+          echo "**Run ID:** ${{ github.run_id }}"
+          echo ""
+          echo "Full result available in artifacts."
