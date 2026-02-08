@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity 0.8.20;
 
-import {ISigstoreVerifier} from "../../../contracts/src/ISigstoreVerifier.sol";
+import {ISigstoreVerifier} from "./ISigstoreVerifier.sol";
 
 /**
  * @title PredictionMarket V3 - Proper Sigstore Integration

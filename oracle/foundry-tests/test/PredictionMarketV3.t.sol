@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 import "../src/PredictionMarketV3.sol";
-import {ISigstoreVerifier} from "../../../contracts/src/ISigstoreVerifier.sol";
+import {ISigstoreVerifier} from "../src/ISigstoreVerifier.sol";
 
 /**
  * @title Unit Tests for PredictionMarket V3

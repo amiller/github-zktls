@@ -1,0 +1,11 @@
+{
+  "marketId": 0,
+  "topicId": "27685",
+  "keyword": "security",
+  "oracleType": "first",
+  "contractAddress": "0x2bE419BCB663136b16cF2D163E309ECaf6B9887b",
+  "betAmount": "0.0001",
+  "position": "YES",
+  "expectedResult": "YES (keyword found in first comment)",
+  "createdAt": "2026-02-08T14:03:37.303Z"
+}

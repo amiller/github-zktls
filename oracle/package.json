@@ -18,6 +18,7 @@
   ],
   "author": "clawTEEdah",
   "license": "MIT",
-  "dependencies": {},
-  "devDependencies": {}
+  "dependencies": {
+    "ethers": "^6.16.0"
+  }
 }
