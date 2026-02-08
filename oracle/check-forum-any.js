@@ -96,14 +96,16 @@ async function main() {
     const output = {
       result: result.found ? 'FOUND' : 'NOT_FOUND',
       found: result.found,
+      settleable: true,  // Comments exist, can settle
       topic_id: topicId,
       topic_title: topic.title,
       keyword: keyword,
+      oracle_type: 'any',  // This oracle checks any comment
       total_matches: result.matches.length,
       first_match: result.first_match,
       all_matches: result.matches,
       timestamp: new Date().toISOString(),
-      oracle_version: '2.0.0-any-comment'
+      oracle_version: '2.1.0-any-comment'
     };
     
     console.log('\nOracle Result:');

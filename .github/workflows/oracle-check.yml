@@ -103,7 +103,7 @@ jobs:
           mkdir -p attestation
           cp oracle-result.json attestation/
           
-          # Add metadata
+          # Add metadata (includes all parameters needed for settlement)
           cat > attestation/metadata.json <<EOF
           {
             "workflow": "${{ github.workflow }}",
@@ -112,7 +112,11 @@ jobs:
             "commit_sha": "${{ github.sha }}",
             "repository": "${{ github.repository }}",
             "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "result_found": ${{ steps.oracle.outputs.found }}
+            "topic_id": "$TOPIC_ID",
+            "keyword": "$KEYWORD",
+            "oracle_type": "$ORACLE_TYPE",
+            "settleable": "${{ steps.oracle.outputs.settleable }}",
+            "result_found": "${{ steps.oracle.outputs.found }}"
           }
           EOF
           

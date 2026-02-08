@@ -76,8 +76,10 @@ async function main() {
         settleable: false,
         topic_id: topicId,
         keyword: keyword,
+        oracle_type: 'first',
         timestamp: new Date().toISOString(),
-        message: 'First comment has not been posted yet. Cannot settle market.'
+        message: 'First comment has not been posted yet. Cannot settle market.',
+        oracle_version: '1.2.0'
       }, null, 2));
       process.exit(0);
     }
@@ -101,6 +103,7 @@ async function main() {
       topic_id: topicId,
       topic_title: topic.title,
       keyword: keyword,
+      oracle_type: 'first',  // This oracle checks first comment only
       first_comment: {
         id: firstComment.id,
         username: firstComment.username,
@@ -108,7 +111,7 @@ async function main() {
         excerpt: firstComment.cooked.substring(0, 200) // First 200 chars
       },
       timestamp: new Date().toISOString(),
-      oracle_version: '1.1.0'
+      oracle_version: '1.2.0'
     };
     
     console.log('\nOracle Result:');

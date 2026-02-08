@@ -1,16 +1,16 @@
 {
-  "result": "NOT_FOUND",
-  "found": false,
+  "result": "FOUND",
+  "found": true,
   "settleable": true,
   "topic_id": "27119",
   "topic_title": "ERC-8109: Diamonds, Simplified",
-  "keyword": "radicle",
+  "keyword": "diamond",
   "first_comment": {
     "id": 65572,
     "username": "vitali_grabovski",
     "created_at": "2025-12-12T14:26:22.217Z",
     "excerpt": "<p>Hello <a class=\"mention\" href=\"/u/mudgen\">@mudgen</a>,</p>\n<p>I like the simplification and the fact that the diamond-pattern spirit and overall diamond idea are still present. Almost all of the su"
   },
-  "timestamp": "2026-02-08T12:20:12.184Z",
+  "timestamp": "2026-02-08T12:32:30.773Z",
   "oracle_version": "1.1.0"
 }
