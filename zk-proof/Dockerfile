@@ -31,8 +31,13 @@ COPY js/ ./js/
 RUN cd js && npm install && npx tsc
 RUN cd circuits && nargo compile
 
+# Pre-download CRS data (bb can't follow HTTP→HTTPS redirects on crs.aztec.network)
+RUN mkdir -p /root/.bb/crs \
+    && curl -sL --range 0-209715199 https://crs.aztec.network/g1.dat -o /root/.bb/crs/bn254_g1.dat \
+    && curl -sL https://crs.aztec.network/g2.dat -o /root/.bb/crs/bn254_g2.dat
+
 # Pre-generate verification key (saves time on each proof)
-RUN cd circuits && bb write_vk -b target/zk_github_attestation.json -o target/vk -t evm
+RUN cd circuits && bb write_vk -b target/zk_github_attestation.json -o target/vk -t evm -c /root/.bb/crs
 
 # Entrypoint script
 COPY <<'EOF' /usr/local/bin/zkproof
@@ -58,7 +63,7 @@ case "$1" in
     nargo execute
 
     echo "==> Generating proof..."
-    bb prove \
+    bb prove -c /root/.bb/crs \
       -b target/zk_github_attestation.json \
       -w target/zk_github_attestation.gz \
       -k target/vk/vk \
@@ -66,7 +71,7 @@ case "$1" in
       -t evm
 
     echo "==> Verifying proof locally..."
-    bb verify \
+    bb verify -c /root/.bb/crs \
       -k target/vk/vk \
       -p target/proof/proof \
       -i target/proof/public_inputs \
@@ -157,7 +162,7 @@ case "$1" in
     PROOF="${2:-/work/proof}"
     echo "==> Verifying proof..."
     cd /prover/circuits
-    bb verify \
+    bb verify -c /root/.bb/crs \
       -k target/vk/vk \
       -p "$PROOF/proof.bin" \
       -i "$PROOF/inputs.bin" \

@@ -2,14 +2,32 @@
 
 This guide walks through generating a ZK proof of a Sigstore attestation.
 
-## Prerequisites
+> **Easiest path**: The GitHub Identity and Email Identity workflows generate proofs
+> automatically using the Docker prover. You only need this guide if you're generating
+> proofs locally or building a custom workflow. See [developer-guide.md](developer-guide.md)
+> for the Docker prover architecture.
+
+## Docker Prover (Recommended)
+
+```bash
+# One command — generates witness, compiles, proves
+docker run --rm -v $(pwd):/work ghcr.io/amiller/zkproof generate /work/bundle.json /work
+```
+
+Output: `proof.bin`, `inputs.bin`, `claim.json` in your working directory.
+
+## Manual Steps (Reference)
+
+The steps below document the manual process. Most users won't need this.
+
+### Prerequisites
 
 - A GitHub repository you control
 - Node.js 18+
 - Docker (for proof generation)
 - `nargo` 1.0.0-beta.17+ (Noir compiler)
 
-## Step 1: Set Up Your Workflow
+### Step 1: Set Up Your Workflow
 
 ### Option A: Fork This Repo
 

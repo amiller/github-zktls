@@ -375,5 +375,6 @@ See [ESCROW.md](ESCROW.md) for the full skill file, or [examples/self-judging-bo
 - [Email Identity NFT](docs/email-login.md) — Email verification walkthrough
 - [Trust Model](docs/trust-model.md) — Security guarantees
 - [Auditing Workflows](docs/auditing-workflows.md) — For verifiers
+- [Developer Guide](docs/developer-guide.md) — Circuit updates, deployment, architecture
 - [Sigstore](https://sigstore.dev/) — Attestation infrastructure
 - [Noir](https://noir-lang.org/) — ZK circuit language
