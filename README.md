@@ -43,10 +43,10 @@ Claim Base Sepolia testnet ETH by proving you have a GitHub account.
 
 1. **Fork this repo** — Click "Fork" at the top of this page
    - **Important:** Uncheck "Copy the master branch only" to include tags
-2. **Switch to the release tag** — In your fork, click the branch dropdown → "Tags" → select `v1.0.1`
+2. **Switch to the release tag** — In your fork, click the branch dropdown → "Tags" → select `v1.0.2`
 3. **Go to Actions** — Click the "Actions" tab
 4. **Run the workflow** — Click "GitHub Identity" → "Run workflow"
-   - **Important:** Select `v1.0.1` tag from the "Use workflow from" dropdown
+   - **Important:** Select `v1.0.2` tag from the "Use workflow from" dropdown
    - Enter your ETH address (see below if you need one)
    - Leave "Generate ZK proof" checked (default)
    - Click "Run workflow" — takes ~5 min
@@ -55,7 +55,7 @@ Claim Base Sepolia testnet ETH by proving you have a GitHub account.
    - **No gas?** [Open an issue](https://github.com/amiller/github-zktls/issues/new) titled `[CLAIM]` and paste the contents of `claim.json` in a ```json code block. We'll relay it for you.
    - **Have gas?** Submit directly with `cast send` (see below)
 
-> **Why the tag?** The faucet contract verifies the exact commit SHA that produced your proof. Running from `v1.0.1` ensures your proof matches the expected commit.
+> **Why the tag?** The faucet contract verifies the exact commit SHA that produced your proof. Running from `v1.0.2` ensures your proof matches the expected commit.
 
 ### Option B: Command Line
 
@@ -65,10 +65,10 @@ gh repo fork amiller/github-zktls --clone
 cd github-zktls
 
 # Switch to the release tag
-git checkout v1.0.1
+git checkout v1.0.2
 
 # Run the workflow from the tag (proof generated in Actions)
-gh workflow run github-identity.yml --ref v1.0.1 -f recipient_address=0xYOUR_ADDRESS
+gh workflow run github-identity.yml --ref v1.0.2 -f recipient_address=0xYOUR_ADDRESS
 
 # Wait for completion, then download
 gh run watch
