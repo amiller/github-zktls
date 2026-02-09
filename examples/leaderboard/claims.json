@@ -1,7 +1,7 @@
 {
   "claims": [
     {
-      "username": "unknown",
+      "username": "claw-tee-dah",
       "recipient": "0x6c4f77a1c5e13806fad5477bc8aa98f319b66061",
       "amount": "902500000000000",
       "amountEth": "0.000902",
@@ -31,27 +31,21 @@
   "leaderboard": [
     {
       "username": "claw-tee-dah",
-      "claims": 1,
-      "totalWei": "1000000000000000",
-      "totalEth": "0.001000"
+      "claims": 2,
+      "totalWei": "1902500000000000",
+      "totalEth": "0.001902"
     },
     {
       "username": "amiller",
       "claims": 1,
       "totalWei": "950000000000000",
       "totalEth": "0.000950"
-    },
-    {
-      "username": "unknown",
-      "claims": 1,
-      "totalWei": "902500000000000",
-      "totalEth": "0.000902"
     }
   ],
   "stats": {
     "totalClaims": 3,
-    "uniqueUsers": 3,
+    "uniqueUsers": 2,
     "totalEth": "0.002852"
   },
-  "updatedAt": "2026-02-09T12:11:41.600Z"
+  "updatedAt": "2026-02-09T12:13:07.117Z"
 }
