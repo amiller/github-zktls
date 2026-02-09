@@ -34,10 +34,16 @@ jobs:
           FAUCET_ADDRESS: '0x72cd70d28284dD215257f73e1C5aD8e28847215B'
         run: node scripts/update-leaderboard.js
 
-      - name: Commit changes
+      - name: Push to data branch
         run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
+          # Save generated file, switch to data branch, commit there
+          cp examples/leaderboard/claims.json /tmp/claims.json
+          git fetch origin data || true
+          git checkout data 2>/dev/null || git checkout --orphan data
+          mkdir -p examples/leaderboard
+          cp /tmp/claims.json examples/leaderboard/claims.json
           git add examples/leaderboard/claims.json
-          git diff --staged --quiet || git commit -m "Update leaderboard [skip ci]"
-          git push
+          git diff --staged --quiet || git commit -m "Update leaderboard"
+          git push origin data

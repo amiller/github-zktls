@@ -55,7 +55,7 @@
     async function load() {
       let data
       try {
-        const res = await fetch('claims.json')
+        const res = await fetch('https://raw.githubusercontent.com/amiller/github-zktls/data/examples/leaderboard/claims.json')
         data = await res.json()
       } catch {
         document.getElementById('leaderboard').innerHTML = '<div class="empty">No data yet. Run the workflow to fetch claims.</div>'
