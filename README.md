@@ -151,6 +151,8 @@ The attestation binds three things:
 
 Fetching the workflow at that commit SHA tells you exactly what executed. No ceremony needed.
 
+**Trust vs convenience:** The TEE property comes from runner isolation + Sigstore attestations. Some examples also use GitHub issues, comments, and labels — those are application UX, not part of the trust model. A verifier checking a ZK proof on-chain only sees `artifactHash`, `repoHash`, `commitSha`. See [trust model](docs/trust-model.md#what-github-provides-trust-vs-convenience) for details.
+
 ### Workflow Templates
 
 | Template | Proves | Uses Browser |
@@ -159,8 +161,22 @@ Fetching the workflow at that commit SHA tells you exactly what executed. No cer
 | `email-challenge.yml` + `email-verify.yml` | Email ownership | No |
 | `tweet-capture.yml` | Tweet authorship | Yes |
 | `file-hash.yml` | File contents at commit | No |
+| `sealed-box.yml` | Multi-attestation sealed box | No |
 
 See [`workflow-templates/`](workflow-templates/) for ready-to-use templates and [`examples/workflows/`](examples/workflows/) for more examples including Twitter profile, GitHub contributions, and PayPal balance proofs.
+
+---
+
+## Try It: Sealed Box
+
+Demonstrates **multiple attestations in a single workflow run** — proving an ephemeral keypair's entire lifecycle happened in one execution. The runner generates an RSA keypair, attests the public key, accepts encrypted submissions, decrypts them, and attests the results. Both attestations share the same `run_id`.
+
+```bash
+# One command: dispatch, encrypt, submit, verify
+./examples/sealed-box/sealed-box.sh "my secret message"
+```
+
+No external binaries — uses `openssl` for RSA-OAEP encryption. See [docs/sealed-box.md](docs/sealed-box.md) for the pattern and trust model.
 
 ---
 
@@ -292,6 +308,11 @@ contract MyApp {
 │       ├── SimpleEscrow.sol        # Basic bounty
 │       └── SelfJudgingEscrow.sol   # AI-judged bounty
 │
+├── examples/sealed-box/         # Multi-attestation sealed box
+│   ├── sealed-box.sh            # Full CLI orchestration
+│   ├── submit.sh                # Standalone submit helper
+│   └── verify-linkage.sh        # Verify attestation linkage
+│
 ├── workflow-templates/       # Ready-to-fork workflows
 │   ├── github-identity.yml   # Prove GitHub account
 │   ├── tweet-capture.yml     # Prove tweet authorship
@@ -380,6 +401,7 @@ See [ESCROW.md](ESCROW.md) for the full skill file, or [examples/self-judging-bo
 - [ESCROW.md](ESCROW.md) — Agent escrow skill file
 - [Faucet Demo](docs/faucet.md) — Try it yourself
 - [Email Identity NFT](docs/email-login.md) — Email verification walkthrough
+- [Sealed Box](docs/sealed-box.md) — Multi-attestation pattern
 - [Trust Model](docs/trust-model.md) — Security guarantees
 - [Auditing Workflows](docs/auditing-workflows.md) — For verifiers
 - [Developer Guide](docs/developer-guide.md) — Circuit updates, deployment, architecture

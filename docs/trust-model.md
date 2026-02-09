@@ -53,6 +53,71 @@ Artifact Hash           ← EXTRACTED AS PUBLIC INPUT
    - The proof doesn't guarantee the repo hasn't been compromised
    - The prover controls their repo
 
+## Two Ways to Get an Attestation
+
+There are two paths to a Sigstore attestation. They produce the same bundle format and the ZK circuit can't tell them apart.
+
+### Path 1: `actions/attest-build-provenance` (inside GitHub Actions)
+
+The workflow calls the action with a file path. Under the hood:
+1. GitHub's OIDC provider issues a token proving "I am repo X at commit Y in run Z"
+2. Fulcio exchanges the token for a short-lived leaf certificate with those claims as X.509 extensions
+3. The action signs the file, logs the signature to Rekor (Sigstore's transparency log)
+4. Result: a Sigstore bundle (DSSE envelope + certificate + Rekor inclusion proof)
+
+This only works inside a GitHub Actions run — that's where the OIDC token comes from.
+
+### Path 2: Direct Sigstore interaction (cosign, sigstore-js, etc.)
+
+Anyone can get a Sigstore certificate. Fulcio supports multiple OIDC providers (GitHub, Google, Microsoft, etc.):
+1. Authenticate with `cosign sign-blob` or the Sigstore libraries
+2. Fulcio issues a cert based on whatever OIDC identity you present
+3. You sign your artifact, it goes to Rekor
+4. Result: same format Sigstore bundle
+
+The certificate contains different OIDC claims depending on the provider. A Google-authenticated cert has an email; a GitHub Actions cert has repo, commit, run_id.
+
+Path 1 is just a convenience wrapper around Path 2. Same Sigstore infrastructure, same Fulcio CA, same bundle format.
+
+## What GitHub Provides: Trust vs Convenience
+
+GitHub serves two roles in this system. Conflating them makes the trust model look more GitHub-dependent than it is.
+
+### Trust layer (load-bearing)
+
+These are what the ZK proof actually depends on:
+
+| Component | What it provides | Could be replaced? |
+|-----------|-----------------|-------------------|
+| **OIDC tokens** | Identity claims (repo, commit, run_id) baked into Fulcio certs | Only by another Sigstore OIDC provider |
+| **Runner isolation** | Ephemeral VM — secrets stay in memory, can't be exfiltrated | By any TEE (SGX, Nitro, etc.) |
+| **Workflow code at commit** | Auditable execution — verifier reads the YAML at that SHA | By any reproducible build system |
+
+The ZK circuit only touches the Sigstore certificate chain. It verifies that Fulcio signed a cert containing certain claims, and that cert signed a DSSE envelope containing an artifact hash. Nothing else.
+
+### Convenience layer (not load-bearing)
+
+These are useful but invisible to the proof:
+
+| Feature | How we use it | Trust role |
+|---------|--------------|------------|
+| **Issues** | Trigger workflows, collect user input, display results | None — just UX |
+| **Comments** | Message passing (email codes, encrypted submissions) | Transport only — could be any channel |
+| **Labels** | Track state (pending, claimed) | None — bookkeeping |
+| **`attest-build-provenance` action** | One-line attestation | Convenience wrapper around Sigstore APIs |
+| **Artifacts** | Download proofs and bundles | File hosting — could be any storage |
+
+A verifier checking a ZK proof on-chain never sees issues, comments, or labels. They see: `artifactHash`, `repoHash`, `commitSha`. Everything else is scaffolding.
+
+### Why this matters
+
+If you're auditing a workflow's trust model, focus on:
+1. What OIDC claims end up in the Sigstore certificate?
+2. What does the workflow code at that commit actually do?
+3. What artifact gets attested?
+
+Ignore: issue formatting, comment templates, label management, notification UX. Those are application code, not trust code.
+
 ## Trust Assumptions
 
 ### You Trust: Sigstore Infrastructure
