@@ -44,7 +44,10 @@ Add input validation to the login form:
 PROMPT="Add input validation..."
 PROMPT_HASH=$(echo -n "$PROMPT" | sha256sum | cut -d' ' -f1)
 
-# Repo hash (which repo should do the work)
+# Commit SHA (the exact workflow version the worker must run — primary check)
+COMMIT_SHA="abcdef1234567890abcdef1234567890abcdef12"
+
+# Repo hash (optional — informational filter, prover controls their repo)
 REPO="worker-agent/my-fork"
 REPO_HASH=$(echo -n "$REPO" | sha256sum | cut -d' ' -f1)
 ```
@@ -53,9 +56,10 @@ REPO_HASH=$(echo -n "$REPO" | sha256sum | cut -d' ' -f1)
 
 ```bash
 cast send $ESCROW_ADDRESS \
-  "createBounty(bytes32,string,bytes32,uint256)" \
+  "createBounty(bytes32,string,bytes20,bytes32,uint256)" \
   "0x$PROMPT_HASH" \
   "The prompt text or IPFS URI" \
+  "0x$COMMIT_SHA" \
   "0x$REPO_HASH" \
   $(date -d "+7 days" +%s) \
   --value 0.01ether \
@@ -224,9 +228,10 @@ The trust model: You trust GitHub Actions + Claude, not the worker.
 interface ISelfJudgingEscrow {
     // Create a bounty
     function createBounty(
-        bytes32 promptHash,    // sha256 of prompt text
+        bytes32 promptHash,     // sha256 of prompt text
         string calldata prompt, // or IPFS URI
-        bytes32 repoHash,      // sha256 of "owner/repo"
+        bytes20 commitSha,      // required: exact git commit (pins auditable code)
+        bytes32 repoHash,       // optional: sha256 of "owner/repo" (0 = skip)
         uint256 deadline
     ) external payable returns (uint256 bountyId);
 
@@ -253,11 +258,12 @@ interface ISelfJudgingEscrow {
 # Create bounty for "fix the login bug"
 PROMPT="Fix the login bug: users can't log in with email containing '+'"
 PROMPT_HASH=$(echo -n "$PROMPT" | sha256sum | cut -d' ' -f1)
-REPO_HASH=$(echo -n "worker/my-app" | sha256sum | cut -d' ' -f1)
+COMMIT_SHA="abcdef1234567890abcdef1234567890abcdef12"  # pin the workflow version
+REPO_HASH=$(echo -n "worker/my-app" | sha256sum | cut -d' ' -f1)  # optional filter
 
 cast send $ESCROW \
-  "createBounty(bytes32,string,bytes32,uint256)" \
-  "0x$PROMPT_HASH" "$PROMPT" "0x$REPO_HASH" $(date -d "+7 days" +%s) \
+  "createBounty(bytes32,string,bytes20,bytes32,uint256)" \
+  "0x$PROMPT_HASH" "$PROMPT" "0x$COMMIT_SHA" "0x$REPO_HASH" $(date -d "+7 days" +%s) \
   --value 0.01ether --rpc-url https://sepolia.base.org --private-key $BUYER
 
 # === WORKER ===
@@ -281,7 +287,8 @@ cast send $ESCROW \
 |-------|----------|
 | "Judgment must be approved" | Claude rejected the work. Check the diff actually satisfies the prompt. |
 | "Certificate mismatch" | sha256(certificate) must match artifactHash in proof. Don't modify the certificate. |
-| "Repo mismatch" | You must run the workflow from the repo specified in the bounty. |
+| "Commit mismatch" | Proof must come from the exact commit SHA specified in the bounty. |
+| "Repo mismatch" | Repo filter didn't match (optional — set to 0 to skip). |
 | "Already claimed" | Bounty was already claimed by someone else. |
 | "Deadline passed" | Bounty expired. Ask creator for refund. |
 

@@ -11,7 +11,8 @@ contract SimpleEscrow {
 
     struct Bounty {
         address buyer;
-        bytes32 repoHash;      // Required repo (SHA-256 of "owner/repo")
+        bytes20 commitSha;     // Required: exact commit that must run (pins immutable code)
+        bytes32 repoHash;      // Optional: repo filter (0 = any). Informational — prover controls their repo
         bytes32 artifactHash;  // Optional: specific artifact required (0 = any)
         uint256 amount;
         bool claimed;
@@ -20,11 +21,12 @@ contract SimpleEscrow {
     mapping(uint256 => Bounty) public bounties;
     uint256 public nextBountyId;
 
-    event BountyCreated(uint256 indexed id, address buyer, bytes32 repoHash, uint256 amount);
+    event BountyCreated(uint256 indexed id, address buyer, bytes20 commitSha, uint256 amount);
     event BountyClaimed(uint256 indexed id, address claimer, bytes20 commitSha);
 
     error BountyNotFound();
     error AlreadyClaimed();
+    error CommitMismatch();
     error RepoMismatch();
     error ArtifactMismatch();
     error TransferFailed();
@@ -33,19 +35,21 @@ contract SimpleEscrow {
         verifier = ISigstoreVerifier(_verifier);
     }
 
-    /// @notice Create a bounty requiring attestation from a specific repo
-    /// @param repoHash SHA-256 of repo name (e.g., keccak256("owner/repo"))
+    /// @notice Create a bounty requiring attestation from a specific commit
+    /// @param commitSha Required: exact git commit SHA (pins auditable code)
+    /// @param repoHash Optional: SHA-256 of "owner/repo" (0 = skip check)
     /// @param artifactHash Optional: require specific artifact (0 = any)
-    function createBounty(bytes32 repoHash, bytes32 artifactHash) external payable returns (uint256 id) {
+    function createBounty(bytes20 commitSha, bytes32 repoHash, bytes32 artifactHash) external payable returns (uint256 id) {
         id = nextBountyId++;
         bounties[id] = Bounty({
             buyer: msg.sender,
+            commitSha: commitSha,
             repoHash: repoHash,
             artifactHash: artifactHash,
             amount: msg.value,
             claimed: false
         });
-        emit BountyCreated(id, msg.sender, repoHash, msg.value);
+        emit BountyCreated(id, msg.sender, commitSha, msg.value);
     }
 
     /// @notice Claim bounty by providing a valid Sigstore attestation proof
@@ -57,8 +61,11 @@ contract SimpleEscrow {
         // Verify proof and decode attestation
         ISigstoreVerifier.Attestation memory att = verifier.verifyAndDecode(proof, publicInputs);
 
-        // Check repo matches
-        if (att.repoHash != b.repoHash) revert RepoMismatch();
+        // Check commit matches (required — pins immutable, auditable code)
+        if (att.commitSha != b.commitSha) revert CommitMismatch();
+
+        // Check repo if specified (optional — informational only)
+        if (b.repoHash != bytes32(0) && att.repoHash != b.repoHash) revert RepoMismatch();
 
         // Check artifact if specified
         if (b.artifactHash != bytes32(0) && att.artifactHash != b.artifactHash) revert ArtifactMismatch();

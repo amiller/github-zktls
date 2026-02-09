@@ -31,9 +31,9 @@ Artifact Hash           ← EXTRACTED AS PUBLIC INPUT
    - The intermediate CA's public key matches the hardcoded value
 
 2. **Correct Claim Extraction**
-   - `repoHash` comes from the certificate's OIDC extension (OID 1.3.6.1.4.1.57264.1.5)
-   - `commitSha` comes from the certificate's OIDC extension (OID 1.3.6.1.4.1.57264.1.3)
+   - `commitSha` comes from the certificate's OIDC extension (OID 1.3.6.1.4.1.57264.1.3) — **primary**: pins immutable, auditable code
    - `artifactHash` comes from the DSSE envelope payload
+   - `repoHash` comes from the certificate's OIDC extension (OID 1.3.6.1.4.1.57264.1.5) — **informational**: the prover controls their repo, so this is a convenience filter, not a security boundary
 
 3. **Immutable Binding**
    - These three values are cryptographically bound together
@@ -107,7 +107,7 @@ These are useful but invisible to the proof:
 | **`attest-build-provenance` action** | One-line attestation | Convenience wrapper around Sigstore APIs |
 | **Artifacts** | Download proofs and bundles | File hosting — could be any storage |
 
-A verifier checking a ZK proof on-chain never sees issues, comments, or labels. They see: `artifactHash`, `repoHash`, `commitSha`. Everything else is scaffolding.
+A verifier checking a ZK proof on-chain never sees issues, comments, or labels. They see: `commitSha` (primary — pins auditable code), `artifactHash`, and `repoHash` (informational). Everything else is scaffolding.
 
 ### Why this matters
 
@@ -176,9 +176,9 @@ If Fulcio is compromised:
 
 ### What's Public (in the proof)
 
+- `commitSha` - Always revealed (primary: pins the exact code that ran)
 - `artifactHash` - Always revealed
-- `repoHash` - Hash is revealed, but not the repo name directly
-- `commitSha` - Always revealed
+- `repoHash` - Hash is revealed, but not the repo name directly (informational only)
 
 ### What's Private
 

@@ -14,7 +14,8 @@ contract AgentEscrow {
         uint256 amount;
         bytes32 promptHash;      // keccak256(prompt)
         string promptUri;        // ipfs://Qm... for retrieval
-        bytes32 repoHash;        // Required repo (sha256 of "owner/repo")
+        bytes20 commitSha;       // Required: exact commit that must run
+        bytes32 repoHash;        // Optional: repo filter (0 = any)
         address judge;           // AI judge address
         uint256 deadline;
         bool claimed;
@@ -36,7 +37,7 @@ contract AgentEscrow {
     mapping(uint256 => Claim) public claims;
     mapping(bytes32 => bool) public claimedArtifacts;
 
-    event BountyCreated(uint256 indexed bountyId, address indexed creator, uint256 amount, bytes32 repoHash);
+    event BountyCreated(uint256 indexed bountyId, address indexed creator, uint256 amount, bytes20 commitSha);
     event ClaimSubmitted(uint256 indexed claimId, uint256 indexed bountyId, bytes32 artifactHash, bytes20 commitSha);
     event ClaimJudged(uint256 indexed claimId, uint256 indexed bountyId, bool approved);
     event BountyRefunded(uint256 indexed bountyId, address indexed creator, uint256 amount);
@@ -44,6 +45,7 @@ contract AgentEscrow {
     error BountyNotFound();
     error AlreadyClaimed();
     error Expired();
+    error CommitMismatch();
     error RepoMismatch();
     error NotJudge();
     error AlreadyJudged();
@@ -58,6 +60,7 @@ contract AgentEscrow {
     function createBounty(
         bytes32 promptHash,
         string calldata promptUri,
+        bytes20 commitSha,
         bytes32 repoHash,
         address judge,
         uint256 deadline
@@ -68,12 +71,13 @@ contract AgentEscrow {
             amount: msg.value,
             promptHash: promptHash,
             promptUri: promptUri,
+            commitSha: commitSha,
             repoHash: repoHash,
             judge: judge,
             deadline: deadline,
             claimed: false
         });
-        emit BountyCreated(bountyId, msg.sender, msg.value, repoHash);
+        emit BountyCreated(bountyId, msg.sender, msg.value, commitSha);
     }
 
     function submitClaim(
@@ -89,8 +93,11 @@ contract AgentEscrow {
         // Verify proof and decode attestation
         ISigstoreVerifier.Attestation memory att = verifier.verifyAndDecode(proof, publicInputs);
 
-        // Check repo matches
-        if (att.repoHash != bounty.repoHash) revert RepoMismatch();
+        // Check commit matches (required — pins immutable, auditable code)
+        if (att.commitSha != bounty.commitSha) revert CommitMismatch();
+
+        // Check repo if specified (optional — informational only)
+        if (bounty.repoHash != bytes32(0) && att.repoHash != bounty.repoHash) revert RepoMismatch();
 
         // Prevent double-claiming
         if (claimedArtifacts[att.artifactHash]) revert AlreadyClaimed();

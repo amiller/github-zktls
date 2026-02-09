@@ -1,9 +1,9 @@
 # Auditing Workflows
 
 When a prover submits a ZK proof, you receive:
+- `commitSha` - Git commit that triggered the workflow (**primary** — pins immutable, auditable code)
 - `artifactHash` - SHA-256 of the artifact the workflow produced
-- `repoHash` - SHA-256 of `"owner/repo"` (the prover can optionally disclose the repo)
-- `commitSha` - Git commit that triggered the workflow
+- `repoHash` - SHA-256 of `"owner/repo"` (**informational** — the prover controls their repo, so treat this as a convenience filter, not a security boundary)
 
 This guide helps you evaluate whether to trust the proof.
 

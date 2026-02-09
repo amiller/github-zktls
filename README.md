@@ -151,7 +151,7 @@ The attestation binds three things:
 
 Fetching the workflow at that commit SHA tells you exactly what executed. No ceremony needed.
 
-**Trust vs convenience:** The TEE property comes from runner isolation + Sigstore attestations. Some examples also use GitHub issues, comments, and labels — those are application UX, not part of the trust model. A verifier checking a ZK proof on-chain only sees `artifactHash`, `repoHash`, `commitSha`. See [trust model](docs/trust-model.md#what-github-provides-trust-vs-convenience) for details.
+**Trust vs convenience:** The TEE property comes from runner isolation + Sigstore attestations. Some examples also use GitHub issues, comments, and labels — those are application UX, not part of the trust model. A verifier checking a ZK proof on-chain sees `commitSha` (primary — pins auditable code), `artifactHash`, and `repoHash` (informational). See [trust model](docs/trust-model.md#what-github-provides-trust-vs-convenience) for details.
 
 ### Workflow Templates
 
@@ -259,9 +259,9 @@ Verification is a single contract call.
 
 ```solidity
 ISigstoreVerifier.Attestation memory att = verifier.verifyAndDecode(proof, inputs);
-// att.repoHash   — SHA-256 of "owner/repo"
-// att.commitSha  — 20-byte git commit
+// att.commitSha    — 20-byte git commit (primary: pins auditable code)
 // att.artifactHash — SHA-256 of workflow output
+// att.repoHash     — SHA-256 of "owner/repo" (informational: prover controls their repo)
 ```
 
 ### On-Chain Verifier
@@ -276,7 +276,7 @@ contract MyApp {
 
     function claimReward(bytes calldata proof, bytes32[] calldata inputs) external {
         ISigstoreVerifier.Attestation memory att = verifier.verifyAndDecode(proof, inputs);
-        require(att.repoHash == EXPECTED_REPO, "Wrong repo");
+        require(att.commitSha == EXPECTED_COMMIT, "Wrong commit");
         // ... your logic
     }
 }
@@ -335,9 +335,10 @@ contract MyApp {
 - ✓ Immutable binding: repo × commit × artifact
 
 **What contracts can verify:**
+- `commitSha` — pin to the exact workflow version (primary check — auditable, immutable)
 - `sha256(certificate) == artifactHash` — the certificate wasn't tampered with
 - Certificate contents — extract claims like `github_actor` for per-user logic
-- `commitSha` — optionally pin to a specific workflow version
+- `repoHash` — optional repo filter (informational — prover controls their repo)
 
 **The pattern:** The workflow outputs a structured certificate. The contract verifies the certificate matches the attested artifact hash, then parses it to extract claims. No circuit changes needed for new claim types.
 
@@ -372,7 +373,7 @@ cast call 0xbD08fd15E893094Ad3191fdA0276Ac880d0FA3e1 \
 
 ```solidity
 ISigstoreVerifier.Attestation memory att = verifier.verifyAndDecode(proof, inputs);
-// Use att.repoHash, att.commitSha, att.artifactHash
+// Use att.commitSha (primary), att.artifactHash, att.repoHash (optional)
 ```
 
 ---

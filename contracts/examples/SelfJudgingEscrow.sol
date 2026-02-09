@@ -15,7 +15,8 @@ contract SelfJudgingEscrow {
         uint256 amount;
         bytes32 promptHash;
         string prompt;
-        bytes32 repoHash;
+        bytes20 commitSha;     // Required: exact commit that must run
+        bytes32 repoHash;      // Optional: repo filter (0 = any)
         uint256 deadline;
         bool claimed;
     }
@@ -23,12 +24,13 @@ contract SelfJudgingEscrow {
     mapping(uint256 => Bounty) public bounties;
     uint256 public nextBountyId;
 
-    event BountyCreated(uint256 indexed id, address creator, bytes32 repoHash, uint256 amount);
+    event BountyCreated(uint256 indexed id, address creator, bytes20 commitSha, uint256 amount);
     event BountyClaimed(uint256 indexed id, address claimer, bytes20 commitSha);
     event BountyRefunded(uint256 indexed id, address creator, uint256 amount);
 
     error BountyNotFound();
     error AlreadyClaimed();
+    error CommitMismatch();
     error RepoMismatch();
     error JudgmentNotApproved();
     error CertificateMismatch();
@@ -41,10 +43,11 @@ contract SelfJudgingEscrow {
         verifier = ISigstoreVerifier(_verifier);
     }
 
-    /// @notice Create a bounty for work in a specific repo
+    /// @notice Create a bounty for work verified at a specific commit
     function createBounty(
         bytes32 promptHash,
         string calldata prompt,
+        bytes20 commitSha,
         bytes32 repoHash,
         uint256 deadline
     ) external payable returns (uint256 id) {
@@ -54,11 +57,12 @@ contract SelfJudgingEscrow {
             amount: msg.value,
             promptHash: promptHash,
             prompt: prompt,
+            commitSha: commitSha,
             repoHash: repoHash,
             deadline: deadline,
             claimed: false
         });
-        emit BountyCreated(id, msg.sender, repoHash, msg.value);
+        emit BountyCreated(id, msg.sender, commitSha, msg.value);
     }
 
     /// @notice Claim bounty by providing proof that Claude approved the work
@@ -78,8 +82,11 @@ contract SelfJudgingEscrow {
         // Certificate must match attested artifact
         if (sha256(certificate) != att.artifactHash) revert CertificateMismatch();
 
-        // Must be from the required repo
-        if (att.repoHash != b.repoHash) revert RepoMismatch();
+        // Check commit matches (required — pins immutable, auditable code)
+        if (att.commitSha != b.commitSha) revert CommitMismatch();
+
+        // Check repo if specified (optional — informational only)
+        if (b.repoHash != bytes32(0) && att.repoHash != b.repoHash) revert RepoMismatch();
 
         // Check certificate contains "judgment": "approved"
         // Using the exact JSON format from the workflow
