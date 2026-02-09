@@ -145,9 +145,9 @@ GitHub Actions provides:
 | **Immutability** | Commit SHA = merkle root of repo |
 
 The attestation binds three things:
-- **Repository** — which repo triggered the workflow
-- **Commit** — exact code version that ran
+- **Commit** — exact code version that ran (primary — pins auditable, immutable code)
 - **Artifact** — hash of the workflow output
+- **Repository** — which repo triggered the workflow (informational — prover controls their repo)
 
 Fetching the workflow at that commit SHA tells you exactly what executed. No ceremony needed.
 
