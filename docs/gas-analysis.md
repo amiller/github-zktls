@@ -132,24 +132,37 @@ If circuit size reduction is needed:
 
 ## Gas Optimization Experiments
 
-### Experiment 1: Drop ZK (`evm-no-zk`) — ~450K savings (16%)
+### Experiment 1: Drop ZK (`evm-no-zk`) — 1,016K savings (37.3%)
 
-**Status: Documented only (not applied)**
+**Status: Implemented on `packed-inputs` branch**
 
 The UltraHonk verifier includes zero-knowledge overhead via `checkEvalsConsistency`,
-which performs 256 MODEXP inversions (~410K gas) plus LIBRA commitment processing.
-Generating the verifier with `-t evm-no-zk` instead of `-t evm` eliminates this.
+which performs 256 MODEXP inversions plus LIBRA commitment processing.
+Generating the verifier with `-t evm-no-zk` instead of `-t evm` eliminates this
+entirely, plus reduces proof size and MSM point count.
+
+**Measured results** (both using packed 21 public inputs):
 
 | Component | evm (ZK) | evm-no-zk | Savings |
 |-----------|----------|-----------|---------|
-| checkEvalsConsistency | ~410K | removed | ~410K |
-| LIBRA commitments | ~40K | removed | ~40K |
-| MSMSize | 62 | 58 | 4 ECMUL (~25K) |
-| **Estimated total savings** | | | **~450K (16%)** |
+| Load VK + parse proof | 227,965 | 201,791 | 26,174 |
+| Fiat-Shamir transcript | 276,983 | 154,149 | 122,834 |
+| Public input delta | 18,451 | 18,451 | 0 |
+| Sumcheck (20 rounds) | 599,632 | 543,045 | 56,587 |
+| Shplemini (MSM+pairing) | 1,598,994 | 788,082 | 810,912 |
+| **TOTAL** | **2,722,025** | **1,705,518** | **1,016,507 (37.3%)** |
+
+Key observations:
+- **Shplemini savings (-811K)** dominate: fewer MSM points (58 vs 62), and
+  no `checkEvalsConsistency` (256 MODEXP inversions eliminated)
+- **Transcript savings (-123K):** smaller proof means less Fiat-Shamir hashing
+- **Proof size:** 9,440 bytes (no-ZK) vs 10,560 bytes (ZK) — 1,120 fewer bytes
+- **Total savings far exceed initial estimate** (1,016K vs ~450K estimated) because
+  the ZK overhead permeates multiple verification stages, not just `checkEvalsConsistency`
 
 Trade-off: Without ZK, a verifier who sees the proof can extract partial witness
-information. This is likely acceptable for public attestation verification, but
-changes the security model.
+information. This is acceptable for public attestation verification where the
+witness data (Sigstore certificates) is already public.
 
 ### Experiment 2: Pack Public Inputs — 103K savings (3.7%)
 
@@ -190,3 +203,17 @@ constraints, invisible against the 303K baseline).
 **Trade-off:** The SigstoreVerifier contract must unpack the Fields back to
 bytes for the Attestation struct, adding ~200 gas in Solidity. Net savings
 remain ~103K.
+
+### Combined: Packed Inputs + No-ZK — 1,120K savings (39.6%)
+
+Applying both optimizations together (packed public inputs + no-ZK verifier):
+
+| Configuration | Total Gas | Savings vs Baseline |
+|---------------|-----------|---------------------|
+| Baseline (ZK, 100 inputs) | 2,825,166 | — |
+| Packed inputs only | 2,722,025 | 103,141 (3.7%) |
+| No-ZK + packed inputs | 1,705,518 | 1,119,648 (39.6%) |
+
+The no-ZK optimization is by far the most impactful single change. Packed inputs
+provide a modest additional reduction. Together they bring verification gas under
+1.8M — a 40% reduction from baseline.
