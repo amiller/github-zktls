@@ -15,7 +15,7 @@ GROUP_SECRET = os.environ.get('GROUP_SECRET', 'default-group-secret')
 POLL_INTERVAL = int(os.environ.get('POLL_INTERVAL', '12'))
 
 GA_ABI = json.loads("""[
-  {"inputs":[{"name":"codeId","type":"bytes32"},{"components":[{"name":"messageHash","type":"bytes32"},{"name":"messageSignature","type":"bytes"},{"name":"appSignature","type":"bytes"},{"name":"kmsSignature","type":"bytes"},{"name":"derivedCompressedPubkey","type":"bytes"},{"name":"appCompressedPubkey","type":"bytes"},{"name":"purpose","type":"string"}],"name":"dstackProof","type":"tuple"},{"name":"pubkey","type":"bytes"}],"name":"registerDstack","outputs":[{"name":"","type":"bytes32"}],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"name":"codeId","type":"bytes32"},{"components":[{"name":"messageHash","type":"bytes32"},{"name":"messageSignature","type":"bytes"},{"name":"appSignature","type":"bytes"},{"name":"kmsSignature","type":"bytes"},{"name":"derivedCompressedPubkey","type":"bytes"},{"name":"appCompressedPubkey","type":"bytes"},{"name":"purpose","type":"string"}],"name":"dstackProof","type":"tuple"}],"name":"registerDstack","outputs":[{"name":"","type":"bytes32"}],"stateMutability":"nonpayable","type":"function"},
   {"inputs":[{"name":"fromMemberId","type":"bytes32"},{"name":"toMemberId","type":"bytes32"},{"name":"encryptedPayload","type":"bytes"}],"name":"onboard","outputs":[],"stateMutability":"nonpayable","type":"function"},
   {"inputs":[{"name":"memberId","type":"bytes32"}],"name":"isMember","outputs":[{"name":"","type":"bool"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"name":"memberId","type":"bytes32"}],"name":"getMember","outputs":[{"name":"codeId","type":"bytes32"},{"name":"pubkey","type":"bytes"},{"name":"registeredAt","type":"uint256"}],"stateMutability":"view","type":"function"},
@@ -72,7 +72,7 @@ my_member_id = Web3.solidity_keccak(["bytes"], [my_pubkey])
 if ga.functions.isMember(my_member_id).call():
     print(f"Already registered: {my_member_id.hex()}")
 else:
-    tx = ga.functions.registerDstack(code_id, dstack_proof, my_pubkey).build_transaction({
+    tx = ga.functions.registerDstack(code_id, dstack_proof).build_transaction({
         'from': acct.address, 'nonce': w3.eth.get_transaction_count(acct.address), 'gas': 500000,
     })
     signed = acct.sign_transaction(tx)

@@ -51,6 +51,7 @@ contract GroupAuth {
     error AlreadyRegistered();
     error MemberNotFound();
     error InvalidDstackSignature();
+    error InvalidOwnershipProof();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -78,28 +79,40 @@ contract GroupAuth {
     // --- Registration ---
 
     /// @notice Register via GitHub Sigstore ZK proof
-    /// @dev codeId = bytes32(att.commitSha), right-padded with zeros
+    /// @dev codeId = bytes32(att.commitSha), right-padded with zeros.
+    ///      ownershipSig binds the proof to the pubkey — prevents proof replay.
+    /// @param proof ZK proof bytes
+    /// @param publicInputs ZK proof public inputs
+    /// @param compressedPubkey 33-byte SEC1 compressed pubkey for this member
+    /// @param ownershipSig EIP-191 signature of keccak256(proof) by pubkey's private key
     function registerGitHub(
         bytes calldata proof,
         bytes32[] calldata publicInputs,
-        bytes calldata pubkey
+        bytes calldata compressedPubkey,
+        bytes calldata ownershipSig
     ) external returns (bytes32) {
         ISigstoreVerifier.Attestation memory att = sigstoreVerifier.verifyAndDecode(proof, publicInputs);
         bytes32 codeId = bytes32(att.commitSha);
         if (!allowedCode[codeId]) revert CodeNotAllowed();
-        return _register(codeId, pubkey);
+        // Verify caller controls the private key for compressedPubkey
+        bytes32 proofHash = keccak256(proof);
+        bytes32 ethHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", proofHash));
+        if (_recoverSigner(ethHash, ownershipSig) != _compressedPubkeyToAddress(compressedPubkey))
+            revert InvalidOwnershipProof();
+        return _register(codeId, compressedPubkey);
     }
 
     /// @notice Register via Dstack KMS signature chain
+    /// @dev Pubkey is derived from the DstackProof's derivedCompressedPubkey — no separate param.
+    ///      The KMS chain proves the TEE controls this key.
     /// @param codeId The appId/composeHash — caller declares, chain verification confirms
     function registerDstack(
         bytes32 codeId,
-        DstackProof calldata dstackProof,
-        bytes calldata pubkey
+        DstackProof calldata dstackProof
     ) external returns (bytes32) {
         if (!_verifyDstackChain(codeId, dstackProof)) revert InvalidDstackSignature();
         if (!allowedCode[codeId]) revert CodeNotAllowed();
-        return _register(codeId, pubkey);
+        return _register(codeId, dstackProof.derivedCompressedPubkey);
     }
 
     function _register(bytes32 codeId, bytes calldata pubkey) internal returns (bytes32 memberId) {

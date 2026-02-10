@@ -39,8 +39,8 @@ DSTACK_SOCKET = os.environ.get(
 GROUPAUTH_ABI = json.loads("""[
   {"inputs":[{"name":"_sigstoreVerifier","type":"address"},{"name":"_kmsRoot","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},
   {"inputs":[{"name":"codeId","type":"bytes32"}],"name":"addAllowedCode","outputs":[],"stateMutability":"nonpayable","type":"function"},
-  {"inputs":[{"name":"proof","type":"bytes"},{"name":"publicInputs","type":"bytes32[]"},{"name":"pubkey","type":"bytes"}],"name":"registerGitHub","outputs":[{"name":"","type":"bytes32"}],"stateMutability":"nonpayable","type":"function"},
-  {"inputs":[{"name":"codeId","type":"bytes32"},{"components":[{"name":"messageHash","type":"bytes32"},{"name":"messageSignature","type":"bytes"},{"name":"appSignature","type":"bytes"},{"name":"kmsSignature","type":"bytes"},{"name":"derivedCompressedPubkey","type":"bytes"},{"name":"appCompressedPubkey","type":"bytes"},{"name":"purpose","type":"string"}],"name":"dstackProof","type":"tuple"},{"name":"pubkey","type":"bytes"}],"name":"registerDstack","outputs":[{"name":"","type":"bytes32"}],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"name":"proof","type":"bytes"},{"name":"publicInputs","type":"bytes32[]"},{"name":"compressedPubkey","type":"bytes"},{"name":"ownershipSig","type":"bytes"}],"name":"registerGitHub","outputs":[{"name":"","type":"bytes32"}],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"name":"codeId","type":"bytes32"},{"components":[{"name":"messageHash","type":"bytes32"},{"name":"messageSignature","type":"bytes"},{"name":"appSignature","type":"bytes"},{"name":"kmsSignature","type":"bytes"},{"name":"derivedCompressedPubkey","type":"bytes"},{"name":"appCompressedPubkey","type":"bytes"},{"name":"purpose","type":"string"}],"name":"dstackProof","type":"tuple"}],"name":"registerDstack","outputs":[{"name":"","type":"bytes32"}],"stateMutability":"nonpayable","type":"function"},
   {"inputs":[{"name":"fromMemberId","type":"bytes32"},{"name":"toMemberId","type":"bytes32"},{"name":"encryptedPayload","type":"bytes"}],"name":"onboard","outputs":[],"stateMutability":"nonpayable","type":"function"},
   {"inputs":[{"name":"memberId","type":"bytes32"}],"name":"isMember","outputs":[{"name":"","type":"bool"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"name":"memberId","type":"bytes32"}],"name":"getOnboarding","outputs":[{"components":[{"name":"fromMember","type":"bytes32"},{"name":"encryptedPayload","type":"bytes"}],"name":"","type":"tuple[]"}],"stateMutability":"view","type":"function"},
@@ -169,6 +169,17 @@ def build_dstack_proof():
     return code_id, dstack_proof_tuple, derived_pubkey
 
 
+def make_github_node(gh_proof):
+    """Generate a GitHub node: compressed pubkey + ownership signature over proof."""
+    privkey = keys.PrivateKey(os.urandom(32))
+    compressed = privkey.public_key.to_compressed_bytes()
+    proof_hash = keccak(gh_proof)
+    eth_hash = keccak(b"\x19Ethereum Signed Message:\n32" + proof_hash)
+    acct = Account.from_key(privkey.to_bytes())
+    sig = acct.unsafe_sign_hash(eth_hash)
+    return compressed, bytes(sig.signature)
+
+
 def main():
     print("=" * 60)
     print("GroupAuth Integration Test")
@@ -230,16 +241,16 @@ def main():
     # ============================
     print("\n--- Test 1: GitHub → GitHub ---")
     try:
-        pubkey_a = b"\x04" + os.urandom(32)  # fake pubkey for node A
-        pubkey_b = b"\x04" + os.urandom(32)  # fake pubkey for node B
+        pubkey_a, sig_a = make_github_node(gh_proof)
+        pubkey_b, sig_b = make_github_node(gh_proof)
         member_a = Web3.solidity_keccak(["bytes"], [pubkey_a])
         member_b = Web3.solidity_keccak(["bytes"], [pubkey_b])
 
-        send_tx(ga.functions.registerGitHub(gh_proof, gh_inputs, pubkey_a), nonce)
+        send_tx(ga.functions.registerGitHub(gh_proof, gh_inputs, pubkey_a, sig_a), nonce)
         nonce += 1
         print(f"  Registered GitHub node A: {member_a.hex()[:16]}...")
 
-        send_tx(ga.functions.registerGitHub(gh_proof, gh_inputs, pubkey_b), nonce)
+        send_tx(ga.functions.registerGitHub(gh_proof, gh_inputs, pubkey_b, sig_b), nonce)
         nonce += 1
         print(f"  Registered GitHub node B: {member_b.hex()[:16]}...")
 
@@ -265,15 +276,15 @@ def main():
     # ============================
     print("\n--- Test 2: GitHub → Dstack ---")
     try:
-        gh_pubkey = b"\x04" + os.urandom(32)
+        gh_pubkey, gh_sig = make_github_node(gh_proof)
         gh_member = Web3.solidity_keccak(["bytes"], [gh_pubkey])
         ds_member = Web3.solidity_keccak(["bytes"], [ds_pubkey])
 
-        send_tx(ga.functions.registerGitHub(gh_proof, gh_inputs, gh_pubkey), nonce)
+        send_tx(ga.functions.registerGitHub(gh_proof, gh_inputs, gh_pubkey, gh_sig), nonce)
         nonce += 1
         print(f"  Registered GitHub node: {gh_member.hex()[:16]}...")
 
-        send_tx(ga.functions.registerDstack(ds_code_id, ds_proof_tuple, ds_pubkey), nonce)
+        send_tx(ga.functions.registerDstack(ds_code_id, ds_proof_tuple), nonce)
         nonce += 1
         print(f"  Registered Dstack node: {ds_member.hex()[:16]}...")
 
@@ -303,39 +314,31 @@ def main():
     # ============================
     print("\n--- Test 3: Dstack → GitHub ---")
     try:
-        # Need fresh dstack proof (different key path → different pubkey → different memberId)
-        ds_code_id2, ds_proof2, ds_pubkey2 = build_dstack_proof()
-        # Same key path returns same key, so same memberId.
-        # For a fresh member, use a wrapper pubkey
-        ds_wrapper_pubkey = b"\x04" + os.urandom(32)
-        ds_member2 = Web3.solidity_keccak(["bytes"], [ds_wrapper_pubkey])
+        # Dstack: pubkey is now derived from the proof's derivedCompressedPubkey.
+        # Same key path returns same key → same memberId. Already registered in test 2.
+        # For a fresh member, we need a different key path or a fresh simulator.
+        # Since the simulator returns the same derived key for "/groupauth","ethereum",
+        # we reuse the already-registered ds_member from test 2 if still a member,
+        # OR we just test the Dstack→GitHub direction using the existing member.
+        # Actually, ds_member was registered in test 2, so just use it here.
 
-        # Hmm — registerDstack stores the pubkey we pass, not the derived pubkey.
-        # The dstack proof verifies the sig chain, and the pubkey param is independent.
-        # So we CAN use a different "encryption pubkey" than the dstack derived key.
-        # This is by design — the pubkey is for encrypting secrets TO this member.
-
-        send_tx(ga.functions.registerDstack(ds_code_id2, ds_proof2, ds_wrapper_pubkey), nonce)
-        nonce += 1
-        print(f"  Registered Dstack node: {ds_member2.hex()[:16]}...")
-
-        gh_pubkey2 = b"\x04" + os.urandom(32)
+        gh_pubkey2, gh_sig2 = make_github_node(gh_proof)
         gh_member2 = Web3.solidity_keccak(["bytes"], [gh_pubkey2])
-        send_tx(ga.functions.registerGitHub(gh_proof, gh_inputs, gh_pubkey2), nonce)
+        send_tx(ga.functions.registerGitHub(gh_proof, gh_inputs, gh_pubkey2, gh_sig2), nonce)
         nonce += 1
         print(f"  Registered GitHub node: {gh_member2.hex()[:16]}...")
 
-        # Dstack onboards GitHub
-        send_tx(ga.functions.onboard(ds_member2, gh_member2, b"ds-to-gh-secret"), nonce)
+        # Dstack onboards GitHub (reuse ds_member from test 2)
+        send_tx(ga.functions.onboard(ds_member, gh_member2, b"ds-to-gh-secret"), nonce)
         nonce += 1
 
         msgs = ga.functions.getOnboarding(gh_member2).call()
         assert len(msgs) == 1 and msgs[0][1] == b"ds-to-gh-secret"
 
         # GitHub can now chain-onboard another
-        gh_pubkey3 = b"\x04" + os.urandom(32)
+        gh_pubkey3, gh_sig3 = make_github_node(gh_proof)
         gh_member3 = Web3.solidity_keccak(["bytes"], [gh_pubkey3])
-        send_tx(ga.functions.registerGitHub(gh_proof, gh_inputs, gh_pubkey3), nonce)
+        send_tx(ga.functions.registerGitHub(gh_proof, gh_inputs, gh_pubkey3, gh_sig3), nonce)
         nonce += 1
         send_tx(ga.functions.onboard(gh_member2, gh_member3, b"chain-onboard"), nonce)
         nonce += 1
