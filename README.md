@@ -2,7 +2,7 @@
 
 **Permissionless credential bridging. Turn any authentication you already have — GitHub account, email, browser session — into a verifiable on-chain claim. No oracles, no MPC, no cooperation from the original service.**
 
-GitHub Actions runs your code in an isolated VM, and Sigstore signs an attestation binding the output to the exact commit SHA. A ZK proof compresses this for on-chain verification at ~300k gas. Because attestations bind to **commit SHA** (not repo ownership), anyone can fork a workflow and produce valid proofs — deployment is permissionless in the same sense as smart contracts.
+GitHub Actions runs your code in an isolated VM, and Sigstore signs an attestation binding the output to the exact commit SHA. A ZK proof compresses this for on-chain verification at ~3M gas. Because attestations bind to **commit SHA** (not repo ownership), anyone can fork a workflow and produce valid proofs — deployment is permissionless in the same sense as smart contracts.
 
 ---
 
@@ -185,7 +185,7 @@ The circuit verifies:
 | Proof generation | **28s** (ubuntu-latest runner) |
 | Peak RAM | **1.5 GB** |
 | Proof size | **10,560 bytes** |
-| On-chain verification | ~300k gas |
+| On-chain verification | ~3M gas |
 
 Verification is a single contract call.
 
