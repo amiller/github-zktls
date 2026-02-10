@@ -63,7 +63,7 @@ cast send 0x72cd70d28284dD215257f73e1C5aD8e28847215B \
   "$(jq -r .certificateHex claim.json)" \
   "$(jq -r .username claim.json)" \
   "$(jq -r .recipient claim.json)" \
-  --rpc-url https://sepolia.base.org --private-key $YOUR_KEY
+  --rpc-url https://sepolia.base.org --gas-limit 3500000 --private-key $YOUR_KEY
 
 # Option 2: Gasless relay — open an issue titled [CLAIM] and paste claim.json
 ```

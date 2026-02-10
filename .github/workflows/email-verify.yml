@@ -224,6 +224,7 @@ jobs:
             "${{ steps.claim.outputs.RECIPIENT }}" \
             --private-key "$RELAYER_KEY" \
             --rpc-url https://sepolia.base.org \
+            --gas-limit 3500000 \
             --json 2>&1)
           EXIT_CODE=$?
           set -e

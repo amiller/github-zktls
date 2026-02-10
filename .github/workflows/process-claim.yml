@@ -43,65 +43,34 @@ jobs:
               return;
             }
 
-            // Validate required fields
-            const required = ['proof', 'inputs', 'certificate', 'username', 'recipient'];
+            const required = ['proof', 'inputs', 'certificateHex', 'username', 'recipient'];
             for (const field of required) {
               if (!claim[field]) {
                 core.setFailed(`Missing required field: ${field}`);
                 return;
               }
             }
-
-            // Validate address format
             if (!/^0x[a-fA-F0-9]{40}$/.test(claim.recipient)) {
               core.setFailed('Invalid recipient address format');
               return;
             }
-
-            // Validate proof is hex
             if (!/^0x[a-fA-F0-9]+$/.test(claim.proof)) {
               core.setFailed('Invalid proof format (must be hex)');
               return;
             }
-
-            // Validate inputs is array of bytes32
             if (!Array.isArray(claim.inputs)) {
               core.setFailed('inputs must be an array');
               return;
             }
 
-            // Validate username is a string
-            if (typeof claim.username !== 'string' || claim.username.length === 0) {
-              core.setFailed('username must be a non-empty string');
-              return;
-            }
-
-            // Use pre-computed hex if available (preserves exact attested bytes including trailing newline)
-            // Fall back to encoding the certificate string (may lose trailing newline — legacy claim.json)
-            let certHex;
-            if (claim.certificateHex) {
-              certHex = claim.certificateHex;
-            } else {
-              const certString = typeof claim.certificate === 'string'
-                ? claim.certificate
-                : JSON.stringify(claim.certificate);
-              certHex = '0x' + Buffer.from(certString, 'utf8').toString('hex');
-            }
-
             core.setOutput('proof', claim.proof);
             core.setOutput('inputs', JSON.stringify(claim.inputs));
-            core.setOutput('certificate', certHex);
+            core.setOutput('certificate', claim.certificateHex);
             core.setOutput('username', claim.username);
             core.setOutput('recipient', claim.recipient);
             core.setOutput('faucet', claim.faucet || '0x72cd70d28284dD215257f73e1C5aD8e28847215B');
 
-            console.log('Parsed claim:');
-            console.log(`  Username: ${claim.username}`);
-            console.log(`  Recipient: ${claim.recipient}`);
-            console.log(`  Faucet: ${claim.faucet || 'default'}`);
-            console.log(`  Proof length: ${claim.proof.length} chars`);
-            console.log(`  Inputs count: ${claim.inputs.length}`);
-            console.log(`  Certificate: ${certString.length} chars -> ${certHex.length} hex chars`);
+            console.log(`Claim: ${claim.username} -> ${claim.recipient} (${claim.inputs.length} inputs, ${claim.certificateHex.length} cert hex chars)`);
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
@@ -129,6 +98,7 @@ jobs:
             "${{ steps.parse.outputs.recipient }}" \
             --private-key "$RELAYER_KEY" \
             --rpc-url https://sepolia.base.org \
+            --gas-limit 3500000 \
             --json 2>&1)
           EXIT_CODE=$?
           set -e
