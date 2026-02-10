@@ -1,33 +1,8 @@
-# GitHub as TEE + ZKP
+# GitHub as a Trusted Execution Environment
 
-**Use GitHub Actions as a trusted execution environment. Verify the results on-chain with zero-knowledge proofs.**
+**Permissionless credential bridging. Turn any authentication you already have — GitHub account, email, browser session — into a verifiable on-chain claim. No oracles, no MPC, no cooperation from the original service.**
 
-## The Idea
-
-Two parties who don't trust each other can both trust GitHub. When you run a workflow:
-
-1. **GitHub executes your code** in an isolated runner
-2. **Sigstore signs an attestation** binding repo + commit + output
-3. **Anyone can verify** the attestation came from GitHub
-
-This is "GitHub as TEE"—a transparent, auditable trusted execution environment.
-
-But what can you prove? Anything the workflow can observe:
-
-4. **Inject credentials** as GitHub Secrets (encrypted, never logged)
-5. **Run a browser** with your session cookies inside the runner
-6. **Capture authenticated content** — screenshots, page data, API responses
-7. **Attest the result** — GitHub signs what the browser saw
-
-This is "GitHub as zkTLS"—prove what a website showed you without revealing your session.
-
-The **browser container** is key: a headless Chromium that runs inside GitHub Actions, injected with your session cookies. It captures proof artifacts (screenshots, DOM data) that get attested by Sigstore. Your credentials never leave the runner.
-
-For on-chain verification, attestations are too verbose. Enter ZK:
-
-7. **Generate a ZK proof** that verifies the Sigstore certificate chain
-8. **Verify on-chain** with a single contract call (~300k gas)
-9. **Extract claims** — repo, commit, artifact hash — without the full certificate
+GitHub Actions runs your code in an isolated VM, and Sigstore signs an attestation binding the output to the exact commit SHA. A ZK proof compresses this for on-chain verification at ~300k gas. Because attestations bind to **commit SHA** (not repo ownership), anyone can fork a workflow and produce valid proofs — deployment is permissionless in the same sense as smart contracts.
 
 ---
 
@@ -133,25 +108,17 @@ The workflow verifies the code, generates a ZK proof, and mints an ERC-721 with 
 
 ---
 
-## GitHub as TEE
+## How It Works
 
-GitHub Actions provides:
+GitHub Actions provides isolation (fresh VM per run), transparency (workflow code visible at commit SHA), and attestation (Sigstore signs what ran via OIDC). The attestation binds three things:
 
-| Property | How |
-|----------|-----|
-| **Isolation** | Fresh VM per run, no persistent state |
-| **Transparency** | Workflow code visible at commit SHA |
-| **Attestation** | Sigstore signs what ran (OIDC-based) |
-| **Immutability** | Commit SHA = merkle root of repo |
-
-The attestation binds three things:
 - **Commit** — exact code version that ran (primary — pins auditable, immutable code)
 - **Artifact** — hash of the workflow output
 - **Repository** — which repo triggered the workflow (informational — prover controls their repo)
 
-Fetching the workflow at that commit SHA tells you exactly what executed. No ceremony needed.
+Fetching the workflow at that commit SHA tells you exactly what executed. No councils, no signing keys, no approval processes — the trust anchor is GitHub itself. The security value is not "trust nobody" but "don't trust the application developer": once deployed, the author has no privileged role. Anyone can fork the repo, run the same workflow, and produce valid attestations.
 
-**Trust vs convenience:** The TEE property comes from runner isolation + Sigstore attestations. Some examples also use GitHub issues, comments, and labels — those are application UX, not part of the trust model. A verifier checking a ZK proof on-chain sees `commitSha` (primary — pins auditable code), `artifactHash`, and `repoHash` (informational). See [trust model](docs/trust-model.md#what-github-provides-trust-vs-convenience) for details.
+**Trust vs convenience:** The TEE property comes from runner isolation + Sigstore attestations. Some examples also use GitHub issues, comments, and labels — those are application UX, not part of the trust model. See [trust model](docs/trust-model.md) for details.
 
 ### Workflow Templates
 
@@ -169,7 +136,7 @@ See [`workflow-templates/`](workflow-templates/) for ready-to-use templates and 
 
 ## Try It: Sealed Box
 
-Demonstrates **multiple attestations in a single workflow run** — proving an ephemeral keypair's entire lifecycle happened in one execution. The runner generates an RSA keypair, attests the public key, accepts encrypted submissions, decrypts them, and attests the results. Both attestations share the same `run_id`.
+GitHub Actions workflows are ephemeral — secrets generated during a run are lost when it terminates. The sealed-box pattern shows how to build **persistent services from ephemeral runners**: the runner generates an RSA keypair, attests the public key mid-execution, accepts encrypted submissions, decrypts them, and attests the results. Both attestations share the same `run_id`, proving the entire lifecycle happened in one execution context.
 
 ```bash
 # One command: dispatch, encrypt, submit, verify
@@ -272,10 +239,12 @@ The owner pre-approves code IDs via `addAllowedCode`. For GitHub, this is the co
 
 ### Why this matters
 
-Traditional group key management requires all members to use the same attestation infrastructure. GroupAuth treats attestation as a pluggable interface — if you can prove you ran approved code, you're in. This enables:
+The faucet and email NFT are **oracle-style** — one-shot attestations that trigger on-chain state changes. GroupAuth is a **coprocessor** — on-chain logic mediates off-chain execution, with the blockchain as the coordination layer and ground truth for rollback protection.
+
+GroupAuth treats attestation as a pluggable interface — if you can prove you ran approved code, you're in. The same on-chain registry accepts Sigstore ZK proofs (GitHub), KMS signature chains (Dstack), and could accept hardware TEE attestations (SGX, Nitro). This enables:
 
 - **Hybrid networks** — TEEs for always-on services, GitHub runners for batch jobs
-- **Cross-cloud groups** — members from different TEE vendors (Phala, Azure SGX, AWS Nitro) joining the same group
+- **Cross-cloud groups** — members from different TEE vendors joining the same group
 - **Incremental trust** — start with GitHub Actions (free, auditable), graduate members to hardware TEEs
 
 See [`contracts/examples/GroupAuth.sol`](contracts/examples/GroupAuth.sol) for the contract and [docs/groupauth-deployment.md](docs/groupauth-deployment.md) for deployment details.
@@ -284,7 +253,7 @@ See [`contracts/examples/GroupAuth.sol`](contracts/examples/GroupAuth.sol) for t
 
 ## GitHub as zkTLS
 
-Traditional zkTLS requires MPC ceremonies or specialized notary servers. GitHub gives you this for free:
+Proving what a website showed you typically requires MPC-TLS (DECO, TLSNotary — interactive coordination during the TLS session), a trusted proxy (Reclaim Protocol), or a hardware TEE oracle (Town Crier). GitHub gives you a simpler path: single-party trust (GitHub), no coordination, no specialized hardware. The tradeoff is weaker isolation (software sandboxing vs. hardware memory encryption), but for applications where the threat is developer misbehavior rather than platform compromise, this is the right trust model.
 
 | Step | What Happens |
 |------|--------------|
