@@ -86,28 +86,6 @@ Install [Rabby](https://rabby.io/) or [Rainbow](https://rainbow.me/) wallet. The
 
 ---
 
-## Try It: Email Identity NFT
-
-Prove you own an email address — no GitHub account, no wallet signing, no Docker needed. A notary sends you a challenge code by email; you share it back; an NFT gets minted.
-
-**EmailNFT:** [`0x720000d8999423e3c47d9dd0c22f33ab3a93534b`](https://base-sepolia.blockscout.com/token/0x720000d8999423e3c47d9dd0c22f33ab3a93534b) (Base Sepolia) — [view all minted NFTs](https://base-sepolia.blockscout.com/token/0x720000d8999423e3c47d9dd0c22f33ab3a93534b)
-
-### How to claim
-
-1. [Open an issue](https://github.com/amiller/github-zktls/issues/new) with title `[EMAIL] claim NFT` and body:
-   ```
-   email: your@email.com
-   recipient: 0xYourEthAddress
-   ```
-2. Check your email for a 64-character hex code
-3. Comment the code on the issue (anyone can do this — the claimer doesn't need a GitHub account)
-
-The workflow verifies the code, generates a ZK proof, and mints an ERC-721 with an on-chain SVG showing the verified email. One NFT per email, fully on-chain.
-
-**Anyone can run their own notary** — just fork this repo and add AWS SES credentials. See [docs/email-login.md](docs/email-login.md) for the full walkthrough and trust model.
-
----
-
 ## How It Works
 
 GitHub Actions provides isolation (fresh VM per run), transparency (workflow code visible at commit SHA), and attestation (Sigstore signs what ran via OIDC). The attestation binds three things:
@@ -131,123 +109,6 @@ Fetching the workflow at that commit SHA tells you exactly what executed. No cou
 | `sealed-box.yml` | Multi-attestation sealed box | No |
 
 See [`workflow-templates/`](workflow-templates/) for ready-to-use templates and [`examples/workflows/`](examples/workflows/) for more examples including Twitter profile, GitHub contributions, and PayPal balance proofs.
-
----
-
-## Try It: Sealed Box
-
-GitHub Actions workflows are ephemeral — secrets generated during a run are lost when it terminates. The sealed-box pattern shows how to build **persistent services from ephemeral runners**: the runner generates an RSA keypair, attests the public key mid-execution, accepts encrypted submissions, decrypts them, and attests the results. Both attestations share the same `run_id`, proving the entire lifecycle happened in one execution context.
-
-```bash
-# One command: dispatch, encrypt, submit, verify
-./examples/sealed-box/sealed-box.sh "my secret message"
-```
-
-No external binaries — uses `openssl` for RSA-OAEP encryption. See [docs/sealed-box.md](docs/sealed-box.md) for the pattern and trust model.
-
----
-
-## Try It: Cross-Attestation GroupAuth
-
-**GitHub runners and Dstack TEEs as equal peers in a shared group.** Different attestation systems — Sigstore (GitHub) and KMS signature chains (Dstack) — registering on the same contract and onboarding each other.
-
-**GroupAuth (Base mainnet):** [`0xdd29de730b99b876f21f3ab5dafba6711ff2c6ac`](https://basescan.org/address/0xdd29de730b99b876f21f3ab5dafba6711ff2c6ac)
-
-### What it demonstrates
-
-A group of agents needs to share a secret (an API key, a decryption key, a signing credential). New members prove their identity through *whatever attestation system they have* — GitHub proves via ZK-verified Sigstore attestations, Dstack TEEs prove via KMS signature chains — and existing members onboard them.
-
-```
-GitHub Runner A                    Dstack TEE (Phala Cloud)
-  │                                  │
-  │ registerGitHub(proof, inputs)    │ registerDstack(codeId, kmsProof)
-  │──────────────┐  ┌────────────────│
-  │              ▼  ▼                │
-  │      ┌────────────────┐          │
-  │      │  GroupAuth.sol  │          │
-  │      │                 │          │
-  │      │  allowedCode[]  │◄─ owner adds commit SHAs + app IDs
-  │      │  members[]      │          │
-  │      │  onboarding[]   │          │
-  │      └────────────────┘          │
-  │              │                   │
-  │    MemberRegistered event        │
-  │              │                   │
-  │              └──────────────────►│ detects event
-  │                                  │ onboard(myId, newId, encryptedSecret)
-  │                                  │
-  │◄─── getOnboarding(myId) ────────│
-  │  "groupauth-demo-secret-v1"      │
-```
-
-The TEE agent runs 24/7 on Phala Cloud, watching for new members and automatically posting the group secret. GitHub runners are ephemeral — they register, receive their onboarding message, and exit.
-
-### Live demo
-
-A Dstack TEE agent is running now:
-- **Health:** [`7385b2...8080.dstack-pha-prod7.phala.network`](https://7385b203510cc6735e512ca776ad27c37a52d249-8080.dstack-pha-prod7.phala.network/)
-- **memberId:** `0x66a87d52...`
-- **Watches** for `MemberRegistered` events on Base mainnet
-
-Register a GitHub node and the TEE will onboard you within ~12 seconds:
-
-```bash
-# Load proof fixtures (from a Sigstore-attested workflow run)
-PROOF=0x$(xxd -p -c0 proof.bin)
-INPUTS=$(python3 -c "
-import sys
-raw = open('inputs.bin','rb').read()
-inputs = ['0x'+raw[i:i+32].hex() for i in range(0,len(raw),32)]
-print('['+','.join(inputs)+']')
-")
-
-# Generate an identity keypair (secp256k1)
-PRIVKEY=$(cast wallet new | grep 'Private key' | awk '{print $3}')
-COMPRESSED_PUBKEY=$(python3 -c "
-from eth_keys import keys
-pk = keys.PrivateKey(bytes.fromhex('${PRIVKEY#0x}'))
-print('0x' + pk.public_key.to_compressed_bytes().hex())
-")
-
-# Sign keccak256(proof) for ownership proof
-PROOF_HASH=$(cast keccak $PROOF)
-OWNERSHIP_SIG=$(cast wallet sign --private-key $PRIVKEY $PROOF_HASH)
-
-# Register on GroupAuth (4 params: proof, inputs, compressedPubkey, ownershipSig)
-GA=0xdd29de730b99b876f21f3ab5dafba6711ff2c6ac
-cast send $GA \
-  "registerGitHub(bytes,bytes32[],bytes,bytes)" \
-  $PROOF "$INPUTS" $COMPRESSED_PUBKEY $OWNERSHIP_SIG \
-  --rpc-url https://mainnet.base.org --private-key $PRIVKEY
-
-# Wait ~12s for TEE to onboard, then read the ECIES-encrypted group secret
-MEMBER_ID=$(cast keccak $COMPRESSED_PUBKEY)
-cast call $GA "getOnboarding(bytes32)" $MEMBER_ID --rpc-url https://mainnet.base.org
-# Decrypt with: ecies.decrypt(privkey_bytes, ciphertext)
-```
-
-### How registration works
-
-Both paths end at the same `_register(codeId, pubkey)`:
-
-| Path | Proof type | codeId |
-|------|-----------|--------|
-| `registerGitHub` | ZK proof of Sigstore attestation | `bytes32(bytes20(commitSha))` |
-| `registerDstack` | KMS signature chain (app→KMS→root) | `bytes32(bytes20(appId))` |
-
-The owner pre-approves code IDs via `addAllowedCode`. For GitHub, this is the commit SHA of the auditable workflow. For Dstack, this is the CVM's app ID (deterministic from the docker-compose hash).
-
-### Why this matters
-
-The faucet and email NFT are **oracle-style** — one-shot attestations that trigger on-chain state changes. GroupAuth is a **coprocessor** — on-chain logic mediates off-chain execution, with the blockchain as the coordination layer and ground truth for rollback protection.
-
-GroupAuth treats attestation as a pluggable interface — if you can prove you ran approved code, you're in. The same on-chain registry accepts Sigstore ZK proofs (GitHub), KMS signature chains (Dstack), and could accept hardware TEE attestations (SGX, Nitro). This enables:
-
-- **Hybrid networks** — TEEs for always-on services, GitHub runners for batch jobs
-- **Cross-cloud groups** — members from different TEE vendors joining the same group
-- **Incremental trust** — start with GitHub Actions (free, auditable), graduate members to hardware TEEs
-
-See [`contracts/examples/GroupAuth.sol`](contracts/examples/GroupAuth.sol) for the contract and [docs/groupauth-deployment.md](docs/groupauth-deployment.md) for deployment details.
 
 ---
 
@@ -355,6 +216,166 @@ contract MyApp {
 
 ---
 
+## Try It: Email Identity NFT
+
+Prove you own an email address — no GitHub account, no wallet signing, no Docker needed. A notary sends you a challenge code by email; you share it back; an NFT gets minted.
+
+**EmailNFT:** [`0x720000d8999423e3c47d9dd0c22f33ab3a93534b`](https://base-sepolia.blockscout.com/token/0x720000d8999423e3c47d9dd0c22f33ab3a93534b) (Base Sepolia) — [view all minted NFTs](https://base-sepolia.blockscout.com/token/0x720000d8999423e3c47d9dd0c22f33ab3a93534b)
+
+### How to claim
+
+1. [Open an issue](https://github.com/amiller/github-zktls/issues/new) with title `[EMAIL] claim NFT` and body:
+   ```
+   email: your@email.com
+   recipient: 0xYourEthAddress
+   ```
+2. Check your email for a 64-character hex code
+3. Comment the code on the issue (anyone can do this — the claimer doesn't need a GitHub account)
+
+The workflow verifies the code, generates a ZK proof, and mints an ERC-721 with an on-chain SVG showing the verified email. One NFT per email, fully on-chain.
+
+**Anyone can run their own notary** — just fork this repo and add AWS SES credentials. See [docs/email-login.md](docs/email-login.md) for the full walkthrough and trust model.
+
+---
+
+## Quick Start
+
+### Generate a Proof
+
+```bash
+# Run workflow in your fork (proof generated automatically)
+gh workflow run github-identity.yml -f recipient_address=0xYOUR_ADDRESS
+
+# Wait and download
+gh run watch && gh run download -n identity-proof
+```
+
+The artifact contains `claim.json` ready for submission.
+
+### Verify On-Chain
+
+```bash
+cast call 0xbD08fd15E893094Ad3191fdA0276Ac880d0FA3e1 \
+  "verifyAndDecode(bytes,bytes32[])" \
+  "$(cat identity-proof/proof.hex)" "$(cat identity-proof/inputs.json)" \
+  --rpc-url https://sepolia.base.org
+```
+
+### Build Your Own App
+
+```solidity
+ISigstoreVerifier.Attestation memory att = verifier.verifyAndDecode(proof, inputs);
+// Use att.commitSha (primary), att.artifactHash, att.repoHash (optional)
+```
+
+---
+
+## For Agents
+
+**Trustless escrow between agents.** Post a bounty, get verifiable work, pay automatically.
+
+The pattern: One agent posts a bounty with a prompt. Another agent forks the repo, does the work, runs a self-judging workflow where Claude evaluates the diff, and claims the bounty with a ZK proof.
+
+```bash
+# Worker claims bounty after Claude approves their diff
+cast send $ESCROW "claim(uint256,bytes,bytes32[],bytes)" ...
+```
+
+**No external judge needed.** Claude runs inside GitHub Actions—the worker triggers it but can't fake the response.
+
+See [ESCROW.md](ESCROW.md) for the full skill file, or [examples/self-judging-bounty/](examples/self-judging-bounty/) for a worked example.
+
+---
+
+## Advanced Patterns
+
+### Sealed Box
+
+GitHub Actions workflows are ephemeral — secrets generated during a run are lost when it terminates. The sealed-box pattern shows how to build **persistent services from ephemeral runners**: the runner generates an RSA keypair, attests the public key mid-execution, accepts encrypted submissions, decrypts them, and attests the results. Both attestations share the same `run_id`, proving the entire lifecycle happened in one execution context.
+
+```bash
+# One command: dispatch, encrypt, submit, verify
+./examples/sealed-box/sealed-box.sh "my secret message"
+```
+
+No external binaries — uses `openssl` for RSA-OAEP encryption. See [docs/sealed-box.md](docs/sealed-box.md) for the pattern and trust model.
+
+### Cross-Attestation GroupAuth
+
+**GitHub runners and Dstack TEEs as equal peers in a shared group.** Different attestation systems — Sigstore (GitHub) and KMS signature chains (Dstack) — registering on the same contract and onboarding each other.
+
+**GroupAuth (Base mainnet):** [`0xdd29de730b99b876f21f3ab5dafba6711ff2c6ac`](https://basescan.org/address/0xdd29de730b99b876f21f3ab5dafba6711ff2c6ac)
+
+A group of agents needs to share a secret (an API key, a decryption key, a signing credential). New members prove their identity through *whatever attestation system they have* — GitHub proves via ZK-verified Sigstore attestations, Dstack TEEs prove via KMS signature chains — and existing members onboard them.
+
+```
+GitHub Runner A                    Dstack TEE (Phala Cloud)
+  │                                  │
+  │ registerGitHub(proof, inputs)    │ registerDstack(codeId, kmsProof)
+  │──────────────┐  ┌────────────────│
+  │              ▼  ▼                │
+  │      ┌────────────────┐          │
+  │      │  GroupAuth.sol  │          │
+  │      │                 │          │
+  │      │  allowedCode[]  │◄─ owner adds commit SHAs + app IDs
+  │      │  members[]      │          │
+  │      │  onboarding[]   │          │
+  │      └────────────────┘          │
+  │              │                   │
+  │    MemberRegistered event        │
+  │              │                   │
+  │              └──────────────────►│ detects event
+  │                                  │ onboard(myId, newId, encryptedSecret)
+  │                                  │
+  │◄─── getOnboarding(myId) ────────│
+  │  "groupauth-demo-secret-v1"      │
+```
+
+The TEE agent runs 24/7 on Phala Cloud, watching for new members and automatically posting the group secret. GitHub runners are ephemeral — they register, receive their onboarding message, and exit.
+
+A Dstack TEE agent is running now:
+- **Health:** [`7385b2...8080.dstack-pha-prod7.phala.network`](https://7385b203510cc6735e512ca776ad27c37a52d249-8080.dstack-pha-prod7.phala.network/)
+- **memberId:** `0x66a87d52...`
+- **Watches** for `MemberRegistered` events on Base mainnet
+
+Both registration paths end at the same `_register(codeId, pubkey)`:
+
+| Path | Proof type | codeId |
+|------|-----------|--------|
+| `registerGitHub` | ZK proof of Sigstore attestation | `bytes32(bytes20(commitSha))` |
+| `registerDstack` | KMS signature chain (app→KMS→root) | `bytes32(bytes20(appId))` |
+
+The faucet and email NFT are **oracle-style** — one-shot attestations that trigger on-chain state changes. GroupAuth is a **coprocessor** — on-chain logic mediates off-chain execution, with the blockchain as the coordination layer and ground truth for rollback protection.
+
+GroupAuth treats attestation as a pluggable interface — if you can prove you ran approved code, you're in. The same on-chain registry accepts Sigstore ZK proofs (GitHub), KMS signature chains (Dstack), and could accept hardware TEE attestations (SGX, Nitro). This enables:
+
+- **Hybrid networks** — TEEs for always-on services, GitHub runners for batch jobs
+- **Cross-cloud groups** — members from different TEE vendors joining the same group
+- **Incremental trust** — start with GitHub Actions (free, auditable), graduate members to hardware TEEs
+
+See [`contracts/examples/GroupAuth.sol`](contracts/examples/GroupAuth.sol) for the contract and [docs/groupauth-deployment.md](docs/groupauth-deployment.md) for deployment details.
+
+---
+
+## Trust Model
+
+**What the proof guarantees:**
+- ✓ Valid Sigstore certificate chain (hardcoded intermediate CA)
+- ✓ Correct signature verification (P-256 + P-384 ECDSA in-circuit)
+- ✓ Immutable binding: repo × commit × artifact
+
+**What contracts can verify:**
+- `commitSha` — pin to the exact workflow version (primary check — auditable, immutable)
+- `sha256(certificate) == artifactHash` — the certificate wasn't tampered with
+- Certificate contents — extract claims like `github_actor` for per-user logic
+- `repoHash` — optional repo filter (informational — prover controls their repo)
+
+**The pattern:** The workflow outputs a structured certificate. The contract verifies the certificate matches the attested artifact hash, then parses it to extract claims. No circuit changes needed for new claim types.
+
+See [docs/trust-model.md](docs/trust-model.md) for details.
+
+---
+
 ## Repository Structure
 
 ```
@@ -396,76 +417,6 @@ contract MyApp {
     ├── trust-model.md        # What the proof guarantees
     └── auditing-workflows.md # Guide for verifiers
 ```
-
----
-
-## Trust Model
-
-**What the proof guarantees:**
-- ✓ Valid Sigstore certificate chain (hardcoded intermediate CA)
-- ✓ Correct signature verification (P-256 + P-384 ECDSA in-circuit)
-- ✓ Immutable binding: repo × commit × artifact
-
-**What contracts can verify:**
-- `commitSha` — pin to the exact workflow version (primary check — auditable, immutable)
-- `sha256(certificate) == artifactHash` — the certificate wasn't tampered with
-- Certificate contents — extract claims like `github_actor` for per-user logic
-- `repoHash` — optional repo filter (informational — prover controls their repo)
-
-**The pattern:** The workflow outputs a structured certificate. The contract verifies the certificate matches the attested artifact hash, then parses it to extract claims. No circuit changes needed for new claim types.
-
-See [docs/trust-model.md](docs/trust-model.md) for details.
-
----
-
-## Quick Start
-
-### Generate a Proof
-
-```bash
-# Run workflow in your fork (proof generated automatically)
-gh workflow run github-identity.yml -f recipient_address=0xYOUR_ADDRESS
-
-# Wait and download
-gh run watch && gh run download -n identity-proof
-```
-
-The artifact contains `claim.json` ready for submission.
-
-### Verify On-Chain
-
-```bash
-cast call 0xbD08fd15E893094Ad3191fdA0276Ac880d0FA3e1 \
-  "verifyAndDecode(bytes,bytes32[])" \
-  "$(cat identity-proof/proof.hex)" "$(cat identity-proof/inputs.json)" \
-  --rpc-url https://sepolia.base.org
-```
-
-### Build Your Own App
-
-```solidity
-ISigstoreVerifier.Attestation memory att = verifier.verifyAndDecode(proof, inputs);
-// Use att.commitSha (primary), att.artifactHash, att.repoHash (optional)
-```
-
----
-
----
-
-## For Agents
-
-**Trustless escrow between agents.** Post a bounty, get verifiable work, pay automatically.
-
-The pattern: One agent posts a bounty with a prompt. Another agent forks the repo, does the work, runs a self-judging workflow where Claude evaluates the diff, and claims the bounty with a ZK proof.
-
-```bash
-# Worker claims bounty after Claude approves their diff
-cast send $ESCROW "claim(uint256,bytes,bytes32[],bytes)" ...
-```
-
-**No external judge needed.** Claude runs inside GitHub Actions—the worker triggers it but can't fake the response.
-
-See [ESCROW.md](ESCROW.md) for the full skill file, or [examples/self-judging-bounty/](examples/self-judging-bounty/) for a worked example.
 
 ---
 
