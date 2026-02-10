@@ -3,7 +3,7 @@
   "current": {
     "tag": "v1.0.2",
     "vk_hash": "0x0d0b56f315c3dda7236c1d352fae8974871d3482125edea8a74139123d17d2fc",
-    "prover_digest": "sha256:7f40b6ebdd2f86fe050aa950f71b386b9cd77d146dd4a20d29e09aa9efe47e11",
+    "prover_digest": "sha256:b13465c5bc36840dc80a4cbfdc8d98abd51ae2abfdaa0d48edc4da872146e5f0",
     "required_commit": "2ed50fd984c8c2419db1663af4d1ede341f2ca29",
     "contracts": {
       "base_sepolia": {

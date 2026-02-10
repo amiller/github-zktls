@@ -17,7 +17,7 @@ permissions:
   packages: read
 
 env:
-  PROVER_DIGEST: sha256:7f40b6ebdd2f86fe050aa950f71b386b9cd77d146dd4a20d29e09aa9efe47e11
+  PROVER_DIGEST: sha256:b13465c5bc36840dc80a4cbfdc8d98abd51ae2abfdaa0d48edc4da872146e5f0
 
 jobs:
   benchmark:

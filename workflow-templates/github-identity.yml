@@ -95,7 +95,7 @@ jobs:
       - name: Generate ZK proof
         if: ${{ inputs.generate_proof }}
         env:
-          PROVER_DIGEST: sha256:7f40b6ebdd2f86fe050aa950f71b386b9cd77d146dd4a20d29e09aa9efe47e11
+          PROVER_DIGEST: sha256:b13465c5bc36840dc80a4cbfdc8d98abd51ae2abfdaa0d48edc4da872146e5f0
           EXPECTED_VK_HASH: "0x0d0b56f315c3dda7236c1d352fae8974871d3482125edea8a74139123d17d2fc"
         run: |
           REGISTRY="${{ vars.PROVER_REGISTRY || 'ghcr.io/amiller/zkproof' }}"
