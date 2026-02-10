@@ -41,7 +41,7 @@ jobs:
           cp examples/leaderboard/claims.json /tmp/claims.json
           git fetch origin data 2>/dev/null
           if git rev-parse origin/data >/dev/null 2>&1; then
-            git checkout -B data origin/data
+            git checkout -f -B data origin/data
           else
             git checkout --orphan data
             git rm -rf .
