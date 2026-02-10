@@ -180,6 +180,100 @@ No external binaries — uses `openssl` for RSA-OAEP encryption. See [docs/seale
 
 ---
 
+## Try It: Cross-Attestation GroupAuth
+
+**GitHub runners and Dstack TEEs as equal peers in a shared group.** Different attestation systems — Sigstore (GitHub) and KMS signature chains (Dstack) — registering on the same contract and onboarding each other.
+
+**GroupAuth (Base mainnet):** [`0x0Af922925AE3602b0dC23c4cFCf54FABe2F54725`](https://basescan.org/address/0x0Af922925AE3602b0dC23c4cFCf54FABe2F54725)
+
+### What it demonstrates
+
+A group of agents needs to share a secret (an API key, a decryption key, a signing credential). New members prove their identity through *whatever attestation system they have* — GitHub proves via ZK-verified Sigstore attestations, Dstack TEEs prove via KMS signature chains — and existing members onboard them.
+
+```
+GitHub Runner A                    Dstack TEE (Phala Cloud)
+  │                                  │
+  │ registerGitHub(proof, inputs)    │ registerDstack(codeId, kmsProof)
+  │──────────────┐  ┌────────────────│
+  │              ▼  ▼                │
+  │      ┌────────────────┐          │
+  │      │  GroupAuth.sol  │          │
+  │      │                 │          │
+  │      │  allowedCode[]  │◄─ owner adds commit SHAs + app IDs
+  │      │  members[]      │          │
+  │      │  onboarding[]   │          │
+  │      └────────────────┘          │
+  │              │                   │
+  │    MemberRegistered event        │
+  │              │                   │
+  │              └──────────────────►│ detects event
+  │                                  │ onboard(myId, newId, encryptedSecret)
+  │                                  │
+  │◄─── getOnboarding(myId) ────────│
+  │  "groupauth-demo-secret-v1"      │
+```
+
+The TEE agent runs 24/7 on Phala Cloud, watching for new members and automatically posting the group secret. GitHub runners are ephemeral — they register, receive their onboarding message, and exit.
+
+### Live demo
+
+A Dstack TEE agent is running now:
+- **Health:** [`7385b2...8080.dstack-pha-prod7.phala.network`](https://7385b203510cc6735e512ca776ad27c37a52d249-8080.dstack-pha-prod7.phala.network/)
+- **memberId:** `0x66a87d52...`
+- **Watches** for `MemberRegistered` events on Base mainnet
+
+Register a GitHub node and the TEE will onboard you within ~12 seconds:
+
+```bash
+# Load proof fixtures (from a Sigstore-attested workflow run)
+PROOF=0x$(xxd -p -c0 proof.bin)
+INPUTS=$(python3 -c "
+import sys
+raw = open('inputs.bin','rb').read()
+inputs = ['0x'+raw[i:i+32].hex() for i in range(0,len(raw),32)]
+print('['+','.join(inputs)+']')
+")
+
+# Generate a random identity key
+PRIVKEY=$(cast wallet new | grep 'Private key' | awk '{print $3}')
+PUBKEY=0x04$(openssl rand -hex 64)
+
+# Register on GroupAuth
+cast send 0x0Af922925AE3602b0dC23c4cFCf54FABe2F54725 \
+  "registerGitHub(bytes,bytes32[],bytes)" \
+  $PROOF "$INPUTS" $PUBKEY \
+  --rpc-url https://mainnet.base.org --private-key $PRIVKEY
+
+# Wait ~12s for TEE to onboard, then read the group secret
+MEMBER_ID=$(cast keccak $PUBKEY)
+cast call 0x0Af922925AE3602b0dC23c4cFCf54FABe2F54725 \
+  "getOnboarding(bytes32)" $MEMBER_ID \
+  --rpc-url https://mainnet.base.org
+```
+
+### How registration works
+
+Both paths end at the same `_register(codeId, pubkey)`:
+
+| Path | Proof type | codeId |
+|------|-----------|--------|
+| `registerGitHub` | ZK proof of Sigstore attestation | `bytes32(bytes20(commitSha))` |
+| `registerDstack` | KMS signature chain (app→KMS→root) | `bytes32(bytes20(appId))` |
+
+The owner pre-approves code IDs via `addAllowedCode`. For GitHub, this is the commit SHA of the auditable workflow. For Dstack, this is the CVM's app ID (deterministic from the docker-compose hash).
+
+### Why this matters
+
+Traditional group key management requires all members to use the same attestation infrastructure. GroupAuth treats attestation as a pluggable interface — if you can prove you ran approved code, you're in. This enables:
+
+- **Hybrid networks** — TEEs for always-on services, GitHub runners for batch jobs
+- **Cross-cloud groups** — members from different TEE vendors (Phala, Azure SGX, AWS Nitro) joining the same group
+- **Incremental trust** — start with GitHub Actions (free, auditable), graduate members to hardware TEEs
+
+See [`contracts/examples/GroupAuth.sol`](contracts/examples/GroupAuth.sol) for the contract and [docs/groupauth-deployment.md](docs/groupauth-deployment.md) for deployment details.
+
+---
+
 ## GitHub as zkTLS
 
 Traditional zkTLS requires MPC ceremonies or specialized notary servers. GitHub gives you this for free:
@@ -305,6 +399,7 @@ contract MyApp {
 │   └── examples/
 │       ├── GitHubFaucet.sol        # Faucet demo
 │       ├── EmailNFT.sol            # Email identity NFT
+│       ├── GroupAuth.sol           # Cross-attestation group membership
 │       ├── SimpleEscrow.sol        # Basic bounty
 │       └── SelfJudgingEscrow.sol   # AI-judged bounty
 │
