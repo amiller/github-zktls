@@ -30,7 +30,6 @@ jobs:
 
       - name: Fetch claims and update leaderboard
         env:
-          BASESCAN_API_KEY: ${{ secrets.BASESCAN_API_KEY }}
           FAUCET_ADDRESS: '0x72cd70d28284dD215257f73e1C5aD8e28847215B'
         run: node scripts/update-leaderboard.js
 

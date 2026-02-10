@@ -113,13 +113,16 @@ case "$1" in
       }
 
       let certificate = '';
+      let certificateHex = '';
       let username = '';
       let recipient = '';
       let faucet = '';
 
       if (fs.existsSync(certPath)) {
-        // Read file and strip trailing newline (jq -r adds one back when extracting)
-        certificate = fs.readFileSync(certPath, 'utf8').trimEnd();
+        // Read raw bytes — must match exactly what Sigstore attested (including trailing newline)
+        const certBytes = fs.readFileSync(certPath);
+        certificate = certBytes.toString('utf8');
+        certificateHex = '0x' + certBytes.toString('hex');
         try {
           const certJson = JSON.parse(certificate);
           username = certJson.github_actor || '';
@@ -133,18 +136,19 @@ case "$1" in
         console.warn('You will need to add certificate, username, recipient, faucet fields manually');
       }
 
-      // Generate claim JSON ready for GitHub issue
+      // Generate claim JSON ready for submission
       const claim = {
         proof,
         inputs,
         certificate,
+        certificateHex,
         username,
         recipient,
         faucet
       };
       fs.writeFileSync('$OUTPUT/claim.json', JSON.stringify(claim, null, 2));
       console.log('Public inputs:', inputs.length, 'elements');
-      if (certificate) console.log('Certificate:', certificate.length, 'bytes');
+      if (certificate) console.log('Certificate:', certificate.length, 'bytes (hex:', certificateHex.length, 'chars)');
     "
 
     echo ""

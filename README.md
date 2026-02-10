@@ -56,12 +56,11 @@ gh run download -n identity-proof
 cd identity-proof
 
 # Option 1: Submit directly with cast (no relay needed)
-CERT_HEX=0x$(xxd -p certificate.json | tr -d '\n')  # NOTE: use xxd on the file directly — Bash $() strips trailing newlines
 cast send 0x72cd70d28284dD215257f73e1C5aD8e28847215B \
   "claim(bytes,bytes32[],bytes,string,address)" \
   "$(jq -r .proof claim.json)" \
   "[$(jq -r '.inputs | join(",")' claim.json)]" \
-  "$CERT_HEX" \
+  "$(jq -r .certificateHex claim.json)" \
   "$(jq -r .username claim.json)" \
   "$(jq -r .recipient claim.json)" \
   --rpc-url https://sepolia.base.org --private-key $YOUR_KEY

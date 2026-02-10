@@ -76,11 +76,17 @@ jobs:
               return;
             }
 
-            // Convert certificate to hex-encoded bytes for cast
-            const certString = typeof claim.certificate === 'string'
-              ? claim.certificate
-              : JSON.stringify(claim.certificate);
-            const certHex = '0x' + Buffer.from(certString, 'utf8').toString('hex');
+            // Use pre-computed hex if available (preserves exact attested bytes including trailing newline)
+            // Fall back to encoding the certificate string (may lose trailing newline — legacy claim.json)
+            let certHex;
+            if (claim.certificateHex) {
+              certHex = claim.certificateHex;
+            } else {
+              const certString = typeof claim.certificate === 'string'
+                ? claim.certificate
+                : JSON.stringify(claim.certificate);
+              certHex = '0x' + Buffer.from(certString, 'utf8').toString('hex');
+            }
 
             core.setOutput('proof', claim.proof);
             core.setOutput('inputs', JSON.stringify(claim.inputs));
