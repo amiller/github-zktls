@@ -63,6 +63,9 @@ vk_check() {
       exit 1
     fi
     echo "VK matches expected ✓"
+  else
+    echo "  (no EXPECTED_VK_HASH set — cannot verify compatibility)"
+    echo "  Check VERSIONS.json for the on-chain VK hash"
   fi
 }
 
@@ -215,7 +218,9 @@ case "$1" in
     echo "  zkproof vk-hash                              Print this prover's VK hash"
     echo ""
     echo "Environment:"
-    echo "  EXPECTED_VK_HASH  If set, generate/verify will fail if VK doesn't match"
+    echo "  EXPECTED_VK_HASH  VK hash of the on-chain verifier (from VERSIONS.json)."
+    echo "                    The prover's VK MUST match or proofs will fail on-chain."
+    echo "                    Set this to catch mismatches early instead of after proof generation."
     echo ""
     echo "Example:"
     echo "  docker run --rm -v \$(pwd):/work zkproof generate /work/bundle.json /work/proof"

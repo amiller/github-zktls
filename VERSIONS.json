@@ -1,22 +1,37 @@
 {
-  "description": "Reference file for VK/prover/contract version tracking. Not imported by code.",
-  "current": {
-    "tag": "v1.0.2",
-    "vk_hash": "0x0d0b56f315c3dda7236c1d352fae8974871d3482125edea8a74139123d17d2fc",
-    "prover_digest": "sha256:b13465c5bc36840dc80a4cbfdc8d98abd51ae2abfdaa0d48edc4da872146e5f0",
-    "required_commit": "2ed50fd984c8c2419db1663af4d1ede341f2ca29",
+  "description": "Version tracking for the ZK verification stack. Not imported by code.",
+
+  "requirements": {
+    "vk_hash": {
+      "value": "0x0d0b56f315c3dda7236c1d352fae8974871d3482125edea8a74139123d17d2fc",
+      "note": "MUST match. Baked into the on-chain HonkVerifier. If your prover produces a different VK, proofs will fail with SumcheckFailed(). Any prover (Docker, local, custom) works as long as it produces this VK."
+    },
+    "required_commit": {
+      "value": "2ed50fd984c8c2419db1663af4d1ede341f2ca29",
+      "tag": "v1.0.2",
+      "note": "MUST match. The faucet checks the commit SHA from the Sigstore attestation. Run the workflow from this tag, not from master."
+    }
+  },
+
+  "reference": {
+    "prover_digest": {
+      "value": "sha256:b13465c5bc36840dc80a4cbfdc8d98abd51ae2abfdaa0d48edc4da872146e5f0",
+      "note": "Known-good Docker image. Produces the correct VK. You can also build your own prover or run outside Docker — only the VK matters."
+    },
+    "tooling": {
+      "nargo": "1.0.0-beta.17",
+      "barretenberg": "v3.0.3",
+      "note": "Changing either version will change the VK even if the circuit is identical."
+    },
     "contracts": {
       "base_sepolia": {
         "sigstore_verifier": "0xbD08fd15E893094Ad3191fdA0276Ac880d0FA3e1",
         "github_faucet": "0x72cd70d28284dD215257f73e1C5aD8e28847215B",
         "email_nft": "0x720000d8999423e3c47d9dd0c22f33ab3a93534b"
       }
-    },
-    "tooling": {
-      "nargo": "1.0.0-beta.17",
-      "barretenberg": "v3.0.3"
     }
   },
+
   "history": [
     {
       "vk_hash": "0x2acd876f5a170e55517fcab6634c35313a5ea9cef062276c60f45d079b57afbb",
