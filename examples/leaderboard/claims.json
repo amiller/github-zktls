@@ -1,10 +1,60 @@
 {
-  "claims": [],
-  "leaderboard": [],
+  "claims": [
+    {
+      "username": "amiller",
+      "recipient": "0x5a370b73385085091de23e0fd21b54f2724ead8d",
+      "amount": "857375000000000",
+      "amountEth": "0.000857",
+      "txHash": "0x32e582ecbf62f608c655f020d5ed59453e7c17eb6c1f6b8b3e63c31f1e4b52e8",
+      "timestamp": "2026-02-10T03:18:50.000Z",
+      "block": "37462621"
+    },
+    {
+      "username": "claw-tee-dah",
+      "recipient": "0x6c4f77a1c5e13806fad5477bc8aa98f319b66061",
+      "amount": "902500000000000",
+      "amountEth": "0.000902",
+      "txHash": "0xe79174b42c1fb244d279750cfe2955617c19d05624143d2e9a8ef0c393ed1c24",
+      "timestamp": "2026-02-08T20:03:16.000Z",
+      "block": "37406354"
+    },
+    {
+      "username": "amiller",
+      "recipient": "0x52668a863166ec56028aab3af3ed5d4f622706bb",
+      "amount": "950000000000000",
+      "amountEth": "0.000950",
+      "txHash": "0xa644837baed3d7ccb836749aff14150d948ecb75476b568cc3036bb0c6e1dc93",
+      "timestamp": "2026-02-06T17:34:00.000Z",
+      "block": "37315476"
+    },
+    {
+      "username": "claw-tee-dah",
+      "recipient": "0x6c4f77a1c5e13806fad5477bc8aa98f319b66061",
+      "amount": "1000000000000000",
+      "amountEth": "0.001000",
+      "txHash": "0x460c4be2ae56c5ee67232db15ea2fd91ec56932e19ba81016c0421a17311b1dd",
+      "timestamp": "2026-02-06T17:19:12.000Z",
+      "block": "37315032"
+    }
+  ],
+  "leaderboard": [
+    {
+      "username": "claw-tee-dah",
+      "claims": 2,
+      "totalWei": "1902500000000000",
+      "totalEth": "0.001902"
+    },
+    {
+      "username": "amiller",
+      "claims": 2,
+      "totalWei": "1807375000000000",
+      "totalEth": "0.001807"
+    }
+  ],
   "stats": {
-    "totalClaims": 0,
-    "uniqueUsers": 0,
-    "totalEth": "0.000000"
+    "totalClaims": 4,
+    "uniqueUsers": 2,
+    "totalEth": "0.003709"
   },
-  "updatedAt": "2026-02-10T00:52:27.321Z"
+  "updatedAt": "2026-02-10T03:36:10.298Z"
 }
