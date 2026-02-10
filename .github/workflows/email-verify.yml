@@ -174,10 +174,12 @@ jobs:
         if: steps.meta.outputs.skip != 'true'
         env:
           PROVER_DIGEST: sha256:7f40b6ebdd2f86fe050aa950f71b386b9cd77d146dd4a20d29e09aa9efe47e11
+          EXPECTED_VK_HASH: "0x0d0b56f315c3dda7236c1d352fae8974871d3482125edea8a74139123d17d2fc"
         run: |
           REGISTRY="${{ vars.PROVER_REGISTRY || 'ghcr.io/amiller/zkproof' }}"
           echo "Using prover: ${REGISTRY}@${PROVER_DIGEST}"
-          docker run --rm -v ${{ github.workspace }}/proof:/work \
+          docker run --rm -e EXPECTED_VK_HASH="${EXPECTED_VK_HASH}" \
+            -v ${{ github.workspace }}/proof:/work \
             "${REGISTRY}@${PROVER_DIGEST}" generate /work/bundle.json /work
 
       - name: Format claim data

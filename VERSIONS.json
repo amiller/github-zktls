@@ -1,0 +1,27 @@
+{
+  "description": "Reference file for VK/prover/contract version tracking. Not imported by code.",
+  "current": {
+    "tag": "v1.0.2",
+    "vk_hash": "0x0d0b56f315c3dda7236c1d352fae8974871d3482125edea8a74139123d17d2fc",
+    "prover_digest": "sha256:7f40b6ebdd2f86fe050aa950f71b386b9cd77d146dd4a20d29e09aa9efe47e11",
+    "required_commit": "2ed50fd984c8c2419db1663af4d1ede341f2ca29",
+    "contracts": {
+      "base_sepolia": {
+        "sigstore_verifier": "0xbD08fd15E893094Ad3191fdA0276Ac880d0FA3e1",
+        "github_faucet": "0x72cd70d28284dD215257f73e1C5aD8e28847215B",
+        "email_nft": "0x720000d8999423e3c47d9dd0c22f33ab3a93534b"
+      }
+    },
+    "tooling": {
+      "nargo": "1.0.0-beta.17",
+      "barretenberg": "v3.0.3"
+    }
+  },
+  "history": [
+    {
+      "vk_hash": "0x2acd876f5a170e55517fcab6634c35313a5ea9cef062276c60f45d079b57afbb",
+      "note": "Pre-v1.0.2. Issue #52 — prover built from stale commit, VK mismatch with on-chain verifier.",
+      "deprecated": true
+    }
+  ]
+}

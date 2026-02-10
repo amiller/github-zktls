@@ -39,10 +39,32 @@ RUN mkdir -p /root/.bb/crs \
 # Pre-generate verification key (saves time on each proof)
 RUN cd circuits && bb write_vk -b target/zk_github_attestation.json -o target/vk -t evm -c /root/.bb/crs
 
+# Store VK hash as hex for easy comparison
+RUN xxd -p -c 99999 /prover/circuits/target/vk/vk_hash > /prover/vk_hash.hex
+
 # Entrypoint script
 COPY <<'EOF' /usr/local/bin/zkproof
 #!/bin/bash
 set -e
+
+vk_check() {
+  VK_HASH=$(cat /prover/vk_hash.hex)
+  echo "Prover VK hash: 0x${VK_HASH}"
+  if [ -n "$EXPECTED_VK_HASH" ]; then
+    EXPECTED=$(echo "$EXPECTED_VK_HASH" | tr '[:upper:]' '[:lower:]' | sed 's/^0x//')
+    if [ "$VK_HASH" != "$EXPECTED" ]; then
+      echo ""
+      echo "ERROR: VK mismatch — proof will fail on-chain!"
+      echo "  Prover VK:   0x${VK_HASH}"
+      echo "  Expected VK: 0x${EXPECTED}"
+      echo ""
+      echo "This prover's circuit does not match the on-chain verifier."
+      echo "Check VERSIONS.json in the repo for the current expected VK hash."
+      exit 1
+    fi
+    echo "VK matches expected ✓"
+  fi
+}
 
 case "$1" in
   generate)
@@ -53,6 +75,9 @@ case "$1" in
       echo "Usage: zkproof generate <bundle.json> [output_dir]"
       exit 1
     fi
+
+    echo "==> Checking VK compatibility..."
+    vk_check
 
     echo "==> Generating witness from attestation bundle..."
     cd /prover/js
@@ -164,6 +189,8 @@ case "$1" in
 
   verify)
     PROOF="${2:-/work/proof}"
+    echo "==> Checking VK compatibility..."
+    vk_check
     echo "==> Verifying proof..."
     cd /prover/circuits
     bb verify -c /root/.bb/crs \
@@ -174,12 +201,21 @@ case "$1" in
     echo "==> Proof valid!"
     ;;
 
+  vk-hash)
+    VK_HASH=$(cat /prover/vk_hash.hex)
+    echo "0x${VK_HASH}"
+    ;;
+
   *)
     echo "ZK Sigstore Proof Generator"
     echo ""
     echo "Usage:"
     echo "  zkproof generate <bundle.json> [output_dir]  Generate proof from attestation"
     echo "  zkproof verify [proof_dir]                   Verify a proof locally"
+    echo "  zkproof vk-hash                              Print this prover's VK hash"
+    echo ""
+    echo "Environment:"
+    echo "  EXPECTED_VK_HASH  If set, generate/verify will fail if VK doesn't match"
     echo ""
     echo "Example:"
     echo "  docker run --rm -v \$(pwd):/work zkproof generate /work/bundle.json /work/proof"
