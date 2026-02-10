@@ -23,7 +23,7 @@ contract IntegrationTest is Test {
         bytes memory inputsRaw = vm.readFileBinary("test/inputs.bin");
         console.log("Inputs raw length:", inputsRaw.length);
 
-        // Convert to bytes32 array (84 elements)
+        // Convert to bytes32 array (5 packed elements)
         uint256 numInputs = inputsRaw.length / 32;
         console.log("Number of inputs:", numInputs);
 

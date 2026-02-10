@@ -127,3 +127,66 @@ If circuit size reduction is needed:
 3. **Reduce MAX_PAE_LENGTH** — 2048→1024 bytes saves ~5% of total
 4. **Note:** Reducing circuit size has minimal impact on on-chain gas (O(log N))
    but directly reduces prover time and memory
+
+---
+
+## Gas Optimization Experiments
+
+### Experiment 1: Drop ZK (`evm-no-zk`) — ~450K savings (16%)
+
+**Status: Documented only (not applied)**
+
+The UltraHonk verifier includes zero-knowledge overhead via `checkEvalsConsistency`,
+which performs 256 MODEXP inversions (~410K gas) plus LIBRA commitment processing.
+Generating the verifier with `-t evm-no-zk` instead of `-t evm` eliminates this.
+
+| Component | evm (ZK) | evm-no-zk | Savings |
+|-----------|----------|-----------|---------|
+| checkEvalsConsistency | ~410K | removed | ~410K |
+| LIBRA commitments | ~40K | removed | ~40K |
+| MSMSize | 62 | 58 | 4 ECMUL (~25K) |
+| **Estimated total savings** | | | **~450K (16%)** |
+
+Trade-off: Without ZK, a verifier who sees the proof can extract partial witness
+information. This is likely acceptable for public attestation verification, but
+changes the security model.
+
+### Experiment 2: Pack Public Inputs — 103K savings (3.7%)
+
+**Status: Implemented on `packed-inputs` branch**
+
+The baseline circuit exposes 84 byte-level public inputs (32 + 32 + 20 bytes),
+each occupying one field element. Packing these into 5 Field elements reduces
+the public input delta computation and Fiat-Shamir transcript hashing.
+
+**Packing scheme:**
+```
+Before: artifact_hash[32] + repo_hash[32] + commit_sha[20] = 84 fields
+After:  artifact_hash_hi, artifact_hash_lo (16 bytes each)
+        repo_hash_hi, repo_hash_lo (16 bytes each)
+        commit_sha_packed (20 bytes)                        = 5 fields
+Total:  84 + 16 pairing → 100 pub inputs  →  5 + 16 = 21 pub inputs
+```
+
+**Measured results:**
+
+| Component | Baseline (100 inputs) | Packed (21 inputs) | Savings |
+|-----------|-----------------------|--------------------|---------|
+| Load VK + parse proof | 227,965 | 227,965 | 0 |
+| Fiat-Shamir transcript | 310,881 | 276,983 | 33,898 |
+| Public input delta | 86,707 | 18,451 | 68,256 |
+| Sumcheck | 599,934 | 599,632 | 302 |
+| Shplemini | 1,599,679 | 1,598,994 | 685 |
+| **TOTAL** | **2,825,166** | **2,722,025** | **103,141 (3.7%)** |
+
+The savings come from:
+- **Public input delta (-68K):** 79 fewer field multiplications
+  (each input requires one mul by beta^i * gamma)
+- **Transcript (-34K):** Fewer keccak256 inputs during Fiat-Shamir
+
+Circuit constraints increase negligibly (5 byte-packing assertions are ~100
+constraints, invisible against the 303K baseline).
+
+**Trade-off:** The SigstoreVerifier contract must unpack the Fields back to
+bytes for the Attestation struct, adding ~200 gas in Solidity. Net savings
+remain ~103K.

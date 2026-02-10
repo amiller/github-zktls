@@ -15,7 +15,7 @@ interface ISigstoreVerifier {
 
     /// @notice Verify a ZK proof of Sigstore attestation
     /// @param proof The proof bytes from bb prove
-    /// @param publicInputs The public inputs (84 field elements as bytes32[])
+    /// @param publicInputs The public inputs (5 packed field elements as bytes32[])
     /// @return valid True if proof is valid
     function verify(bytes calldata proof, bytes32[] calldata publicInputs) external view returns (bool valid);
 
@@ -27,7 +27,7 @@ interface ISigstoreVerifier {
         external view returns (Attestation memory attestation);
 
     /// @notice Decode public inputs into attestation struct (no verification)
-    /// @param publicInputs The public inputs (84 field elements)
+    /// @param publicInputs The public inputs (5 packed field elements)
     /// @return attestation The decoded attestation
     function decodePublicInputs(bytes32[] calldata publicInputs)
         external pure returns (Attestation memory attestation);

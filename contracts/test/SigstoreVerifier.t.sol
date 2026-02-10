@@ -30,7 +30,6 @@ contract SigstoreVerifierTest is Test {
     }
 
     function test_DecodePublicInputs_RealValues() public view {
-        // Test with realistic hash values
         bytes32 artifactHash = sha256("test artifact content");
         bytes32 repoHash = sha256("owner/repo");
         bytes20 commitSha = bytes20(hex"a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2");
@@ -44,40 +43,28 @@ contract SigstoreVerifierTest is Test {
     }
 
     function test_DecodePublicInputs_RevertIfWrongLength() public {
-        bytes32[] memory inputs = new bytes32[](83); // Wrong length
+        bytes32[] memory inputs = new bytes32[](4); // Wrong length (not 5)
 
         vm.expectRevert(SigstoreVerifier.InvalidPublicInputsLength.selector);
         verifier.decodePublicInputs(inputs);
     }
 
     function test_HonkVerifierDeployed() public view {
-        // Check that the HonkVerifier was deployed
         assertTrue(address(verifier.honk()) != address(0));
     }
 
-    // Helper: create mock public inputs from components
+    // Helper: pack bytes32/bytes20 into 5-element public inputs array
     function _mockPublicInputs(
         bytes32 artifactHash,
         bytes32 repoHash,
         bytes20 commitSha
     ) internal pure returns (bytes32[] memory) {
-        bytes32[] memory inputs = new bytes32[](84);
-
-        // artifact_hash: bytes 0-31
-        for (uint i = 0; i < 32; i++) {
-            inputs[i] = bytes32(uint256(uint8(artifactHash[i])));
-        }
-
-        // repo_hash: bytes 32-63
-        for (uint i = 0; i < 32; i++) {
-            inputs[32 + i] = bytes32(uint256(uint8(repoHash[i])));
-        }
-
-        // commit_sha: bytes 64-83
-        for (uint i = 0; i < 20; i++) {
-            inputs[64 + i] = bytes32(uint256(uint8(commitSha[i])));
-        }
-
+        bytes32[] memory inputs = new bytes32[](5);
+        inputs[0] = bytes32(uint256(artifactHash) >> 128); // artifact_hash_hi
+        inputs[1] = bytes32(uint256(artifactHash) & ((1 << 128) - 1)); // artifact_hash_lo
+        inputs[2] = bytes32(uint256(repoHash) >> 128); // repo_hash_hi
+        inputs[3] = bytes32(uint256(repoHash) & ((1 << 128) - 1)); // repo_hash_lo
+        inputs[4] = bytes32(uint256(uint160(commitSha))); // commit_sha_packed
         return inputs;
     }
 }
