@@ -36,11 +36,11 @@ contract GroupAuthTest is Test {
     bytes20 commitSha = bytes20(hex"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
     bytes32 repoHash = sha256("owner/repo");
 
-    // Two GitHub "nodes" with different pubkeys
-    bytes ghPubkey1 = hex"0401020304";
-    bytes ghPubkey2 = hex"0405060708";
-    // Dstack "node" pubkey
-    bytes dsPubkey = hex"04aabbccdd";
+    // GitHub "nodes" with real keypairs (for ownership signatures)
+    uint256 ghPriv1 = 0xD00D1;
+    uint256 ghPriv2 = 0xD00D2;
+    bytes constant GH_PUBKEY1 = hex"0320c97283c8dbee8a3c74443f5aa8a383071903f21277e8945732686283c04497";
+    bytes constant GH_PUBKEY2 = hex"034b1084f2310ebc9590a0a2d57e34cebf8c0f589f71be94d0b98a500fdb1d9d5a";
 
     bytes32 ghCodeId; // bytes32(commitSha)
 
@@ -95,12 +95,16 @@ contract GroupAuthTest is Test {
         });
     }
 
-    function _registerGitHub(bytes memory pubkey) internal returns (bytes32) {
-        return ga.registerGitHub("", new bytes32[](0), pubkey);
+    function _registerGitHub(uint256 privKey, bytes memory pubkey) internal returns (bytes32) {
+        bytes memory proof = "";
+        bytes32 proofHash = keccak256(proof);
+        bytes32 ethHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", proofHash));
+        bytes memory ownershipSig = _sign(privKey, ethHash);
+        return ga.registerGitHub(proof, new bytes32[](0), pubkey, ownershipSig);
     }
 
-    function _registerDstack(bytes memory pubkey) internal returns (bytes32) {
-        return ga.registerDstack(appId, _buildDstackProof(keccak256("handshake")), pubkey);
+    function _registerDstack() internal returns (bytes32) {
+        return ga.registerDstack(appId, _buildDstackProof(keccak256("handshake")));
     }
 
     // --- Admin ---
@@ -127,39 +131,48 @@ contract GroupAuthTest is Test {
     // --- GitHub registration ---
 
     function test_RegisterGitHub() public {
-        bytes32 memberId = _registerGitHub(ghPubkey1);
-        assertEq(memberId, keccak256(ghPubkey1));
+        bytes32 memberId = _registerGitHub(ghPriv1, GH_PUBKEY1);
+        assertEq(memberId, keccak256(GH_PUBKEY1));
         assertTrue(ga.isMember(memberId));
 
         (bytes32 codeId, bytes memory pubkey, uint256 registeredAt) = ga.getMember(memberId);
         assertEq(codeId, ghCodeId);
-        assertEq(pubkey, ghPubkey1);
+        assertEq(pubkey, GH_PUBKEY1);
         assertGt(registeredAt, 0);
     }
 
     function test_RegisterGitHub_EmitsEvent() public {
         vm.expectEmit(true, true, false, true);
-        emit GroupAuth.MemberRegistered(keccak256(ghPubkey1), ghCodeId, ghPubkey1);
-        _registerGitHub(ghPubkey1);
+        emit GroupAuth.MemberRegistered(keccak256(GH_PUBKEY1), ghCodeId, GH_PUBKEY1);
+        _registerGitHub(ghPriv1, GH_PUBKEY1);
     }
 
     function test_RegisterGitHub_RevertCodeNotAllowed() public {
         mockVerifier.setAttestation(sha256("art"), repoHash, bytes20(hex"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
         vm.expectRevert(GroupAuth.CodeNotAllowed.selector);
-        ga.registerGitHub("", new bytes32[](0), ghPubkey1);
+        _registerGitHub(ghPriv1, GH_PUBKEY1);
     }
 
     function test_RegisterGitHub_RevertDuplicate() public {
-        _registerGitHub(ghPubkey1);
+        _registerGitHub(ghPriv1, GH_PUBKEY1);
         vm.expectRevert(GroupAuth.AlreadyRegistered.selector);
-        _registerGitHub(ghPubkey1);
+        _registerGitHub(ghPriv1, GH_PUBKEY1);
+    }
+
+    function test_RegisterGitHub_RevertBadOwnershipSig() public {
+        bytes memory proof = "";
+        bytes32 proofHash = keccak256(proof);
+        bytes32 ethHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", proofHash));
+        bytes memory wrongSig = _sign(ghPriv2, ethHash); // sign with wrong key
+        vm.expectRevert(GroupAuth.InvalidOwnershipProof.selector);
+        ga.registerGitHub(proof, new bytes32[](0), GH_PUBKEY1, wrongSig);
     }
 
     // --- Dstack registration ---
 
     function test_RegisterDstack() public {
-        bytes32 memberId = _registerDstack(dsPubkey);
-        assertEq(memberId, keccak256(dsPubkey));
+        bytes32 memberId = _registerDstack();
+        assertEq(memberId, keccak256(DERIVED_PUBKEY));
         assertTrue(ga.isMember(memberId));
 
         (bytes32 codeId,,) = ga.getMember(memberId);
@@ -170,20 +183,20 @@ contract GroupAuthTest is Test {
         bytes32 wrongAppId = bytes32(bytes20(uint160(0xBEEF)));
         ga.addAllowedCode(wrongAppId);
         vm.expectRevert(GroupAuth.InvalidDstackSignature.selector);
-        ga.registerDstack(wrongAppId, _buildDstackProof(keccak256("m")), dsPubkey);
+        ga.registerDstack(wrongAppId, _buildDstackProof(keccak256("m")));
     }
 
     function test_RegisterDstack_RevertCodeNotAllowed() public {
         ga.removeAllowedCode(appId);
         vm.expectRevert(GroupAuth.CodeNotAllowed.selector);
-        ga.registerDstack(appId, _buildDstackProof(keccak256("m")), dsPubkey);
+        ga.registerDstack(appId, _buildDstackProof(keccak256("m")));
     }
 
     // --- Onboarding ---
 
     function test_Onboard() public {
-        bytes32 m1 = _registerGitHub(ghPubkey1);
-        bytes32 m2 = _registerGitHub(ghPubkey2);
+        bytes32 m1 = _registerGitHub(ghPriv1, GH_PUBKEY1);
+        bytes32 m2 = _registerGitHub(ghPriv2, GH_PUBKEY2);
 
         ga.onboard(m1, m2, "encrypted_secret");
 
@@ -194,8 +207,8 @@ contract GroupAuthTest is Test {
     }
 
     function test_Onboard_EmitsEvent() public {
-        bytes32 m1 = _registerGitHub(ghPubkey1);
-        bytes32 m2 = _registerGitHub(ghPubkey2);
+        bytes32 m1 = _registerGitHub(ghPriv1, GH_PUBKEY1);
+        bytes32 m2 = _registerGitHub(ghPriv2, GH_PUBKEY2);
 
         vm.expectEmit(true, true, false, false);
         emit GroupAuth.OnboardingPosted(m2, m1);
@@ -203,7 +216,7 @@ contract GroupAuthTest is Test {
     }
 
     function test_Onboard_RevertFromNotMember() public {
-        bytes32 m2 = _registerGitHub(ghPubkey2);
+        bytes32 m2 = _registerGitHub(ghPriv2, GH_PUBKEY2);
         bytes32 fakeId = keccak256("nobody");
 
         vm.expectRevert(GroupAuth.MemberNotFound.selector);
@@ -211,7 +224,7 @@ contract GroupAuthTest is Test {
     }
 
     function test_Onboard_RevertToNotMember() public {
-        bytes32 m1 = _registerGitHub(ghPubkey1);
+        bytes32 m1 = _registerGitHub(ghPriv1, GH_PUBKEY1);
         bytes32 fakeId = keccak256("nobody");
 
         vm.expectRevert(GroupAuth.MemberNotFound.selector);
@@ -219,9 +232,9 @@ contract GroupAuthTest is Test {
     }
 
     function test_Onboard_MultipleHelpers() public {
-        bytes32 m1 = _registerGitHub(ghPubkey1);
-        bytes32 m2 = _registerDstack(dsPubkey);
-        bytes32 m3 = _registerGitHub(ghPubkey2);
+        bytes32 m1 = _registerGitHub(ghPriv1, GH_PUBKEY1);
+        bytes32 m2 = _registerDstack();
+        bytes32 m3 = _registerGitHub(ghPriv2, GH_PUBKEY2);
 
         ga.onboard(m1, m3, "from_gh");
         ga.onboard(m2, m3, "from_ds");
@@ -236,11 +249,11 @@ contract GroupAuthTest is Test {
 
     function test_Integration_GitHubToGitHub() public {
         // Node A registers via GitHub proof
-        bytes32 nodeA = _registerGitHub(ghPubkey1);
+        bytes32 nodeA = _registerGitHub(ghPriv1, GH_PUBKEY1);
         assertTrue(ga.isMember(nodeA));
 
         // Node B registers via GitHub proof (different pubkey, same code)
-        bytes32 nodeB = _registerGitHub(ghPubkey2);
+        bytes32 nodeB = _registerGitHub(ghPriv2, GH_PUBKEY2);
         assertTrue(ga.isMember(nodeB));
 
         // Node A onboards Node B with encrypted group secret
@@ -264,10 +277,10 @@ contract GroupAuthTest is Test {
 
     function test_Integration_GitHubToDstack() public {
         // GitHub runner registers first
-        bytes32 ghNode = _registerGitHub(ghPubkey1);
+        bytes32 ghNode = _registerGitHub(ghPriv1, GH_PUBKEY1);
 
         // Dstack TEE registers
-        bytes32 dsNode = _registerDstack(dsPubkey);
+        bytes32 dsNode = _registerDstack();
 
         // GitHub runner onboards Dstack TEE
         bytes memory encryptedSecret = abi.encodePacked("gh-to-ds-secret");
@@ -288,10 +301,10 @@ contract GroupAuthTest is Test {
 
     function test_Integration_DstackToGitHub() public {
         // Dstack TEE registers first (long-running, watching events)
-        bytes32 dsNode = _registerDstack(dsPubkey);
+        bytes32 dsNode = _registerDstack();
 
         // GitHub runner spins up and registers
-        bytes32 ghNode = _registerGitHub(ghPubkey1);
+        bytes32 ghNode = _registerGitHub(ghPriv1, GH_PUBKEY1);
 
         // Dstack sees MemberRegistered event, onboards the GitHub runner
         bytes memory encryptedSecret = abi.encodePacked("ds-to-gh-secret");
@@ -302,7 +315,7 @@ contract GroupAuthTest is Test {
         assertEq(msgs[0].fromMember, dsNode);
 
         // GitHub runner can now also onboard future members
-        bytes32 ghNode2 = _registerGitHub(ghPubkey2);
+        bytes32 ghNode2 = _registerGitHub(ghPriv2, GH_PUBKEY2);
         ga.onboard(ghNode, ghNode2, abi.encodePacked("gh-chain-onboard"));
 
         GroupAuth.OnboardMsg[] memory msgs2 = ga.getOnboarding(ghNode2);

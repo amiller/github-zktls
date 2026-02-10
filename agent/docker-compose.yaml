@@ -1,0 +1,13 @@
+services:
+  groupauth-agent:
+    image: ghcr.io/amiller/groupauth-agent:v5
+    ports:
+      - "8080:8080"
+    environment:
+      - GROUPAUTH_ADDRESS=${GROUPAUTH_ADDRESS}
+      - GROUP_SECRET=${GROUP_SECRET:-default-group-secret}
+      - RPC_URL=${RPC_URL:-https://mainnet.base.org}
+      - POLL_INTERVAL=${POLL_INTERVAL:-12}
+    volumes:
+      - /var/run/dstack.sock:/var/run/dstack.sock
+    restart: unless-stopped
