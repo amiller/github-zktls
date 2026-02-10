@@ -1,0 +1,4 @@
+[package]
+name = "bench_p256_verify"
+type = "bin"
+compiler_version = ">=1.0.0"
