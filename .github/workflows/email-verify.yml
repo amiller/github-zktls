@@ -237,8 +237,15 @@ jobs:
           fi
 
           TX_HASH=$(echo "$OUTPUT" | jq -r '.transactionHash')
+          STATUS=$(echo "$OUTPUT" | jq -r '.status')
           echo "tx_hash=$TX_HASH" >> $GITHUB_OUTPUT
-          echo "Transaction submitted: $TX_HASH"
+
+          if [ "$STATUS" = "0x0" ]; then
+            echo "error_reason=Transaction reverted on-chain (tx: $TX_HASH)" >> $GITHUB_OUTPUT
+            echo "Transaction reverted: $TX_HASH"
+            exit 1
+          fi
+          echo "Transaction succeeded: $TX_HASH"
 
       - name: Comment success
         if: success() && steps.meta.outputs.skip != 'true'
