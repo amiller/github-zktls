@@ -38,12 +38,16 @@ jobs:
         run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
-          # Save generated file, switch to data branch, commit there
           cp examples/leaderboard/claims.json /tmp/claims.json
-          git fetch origin data || true
-          git checkout data 2>/dev/null || git checkout --orphan data
+          git fetch origin data 2>/dev/null
+          if git rev-parse origin/data >/dev/null 2>&1; then
+            git checkout -B data origin/data
+          else
+            git checkout --orphan data
+            git rm -rf .
+          fi
           mkdir -p examples/leaderboard
           cp /tmp/claims.json examples/leaderboard/claims.json
           git add examples/leaderboard/claims.json
-          git diff --staged --quiet || git commit -m "Update leaderboard"
+          git diff --staged --quiet || git commit -m "Update leaderboard [skip ci]"
           git push origin data
