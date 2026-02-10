@@ -51,7 +51,7 @@ GROUPAUTH_ABI = json.loads("""[
 def deploy_contracts_via_script(w3, account):
     """Deploy all contracts using a forge script to handle library linking."""
     # Write a temporary deployment script
-    script = CONTRACTS_DIR / "script" / "DeployGroupAuth.s.sol"
+    script = CONTRACTS_DIR / "script" / "DeployGroupAuthTest.s.sol"
     script.parent.mkdir(exist_ok=True)
     script.write_text(f"""// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.21;
@@ -59,7 +59,7 @@ import {{Script}} from "forge-std/Script.sol";
 import {{HonkVerifier}} from "../src/HonkVerifier.sol";
 import {{SigstoreVerifier}} from "../src/SigstoreVerifier.sol";
 import {{GroupAuth}} from "../examples/GroupAuth.sol";
-contract DeployGroupAuth is Script {{
+contract DeployGroupAuthTest is Script {{
     function run() external {{
         vm.startBroadcast();
         HonkVerifier honk = new HonkVerifier();
@@ -70,7 +70,7 @@ contract DeployGroupAuth is Script {{
 }}
 """)
     result = subprocess.run([
-        "forge", "script", "script/DeployGroupAuth.s.sol:DeployGroupAuth",
+        "forge", "script", "script/DeployGroupAuthTest.s.sol:DeployGroupAuthTest",
         "--rpc-url", ANVIL_RPC,
         "--private-key", ANVIL_KEY,
         "--broadcast",
@@ -89,7 +89,7 @@ contract DeployGroupAuth is Script {{
 
     # Parse addresses from broadcast JSON
     addresses = {}
-    broadcast_dir = CONTRACTS_DIR / "broadcast" / "DeployGroupAuth.s.sol"
+    broadcast_dir = CONTRACTS_DIR / "broadcast" / "DeployGroupAuthTest.s.sol"
     for chain_dir in sorted(broadcast_dir.iterdir()) if broadcast_dir.exists() else []:
         run_file = chain_dir / "run-latest.json"
         if run_file.exists():

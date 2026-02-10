@@ -8,6 +8,7 @@ from web3 import Web3
 from eth_account import Account
 from eth_keys import keys
 from eth_utils import keccak
+from ecies import encrypt as ecies_encrypt
 
 RPC_URL = os.environ.get('RPC_URL', 'https://mainnet.base.org')
 GROUPAUTH_ADDRESS = os.environ['GROUPAUTH_ADDRESS']
@@ -112,7 +113,9 @@ while True:
             if new_id == my_member_id or new_id in onboarded:
                 continue
             print(f"New member: {new_id.hex()}")
-            payload = GROUP_SECRET.encode()
+            member_info = ga.functions.getMember(new_id).call()
+            recipient_pubkey = member_info[1]  # compressed pubkey
+            payload = ecies_encrypt(recipient_pubkey, GROUP_SECRET.encode())
             tx = ga.functions.onboard(my_member_id, new_id, payload).build_transaction({
                 'from': acct.address, 'nonce': w3.eth.get_transaction_count(acct.address), 'gas': 200000,
             })

@@ -128,7 +128,7 @@ services:
     network_mode: host
 
   groupauth-agent:
-    image: ghcr.io/amiller/groupauth-agent:v1
+    image: ghcr.io/amiller/groupauth-agent:v5
     ports:
       - "8080:8080"
     environment:
@@ -150,11 +150,11 @@ docker buildx build \
   .
 
 # Push to GHCR
-skopeo copy oci-archive:image.tar docker://ghcr.io/amiller/groupauth-agent:v1
+skopeo copy oci-archive:image.tar docker://ghcr.io/amiller/groupauth-agent:v5
 
 # Or simpler:
-docker build -t ghcr.io/amiller/groupauth-agent:v1 .
-docker push ghcr.io/amiller/groupauth-agent:v1
+docker build -t ghcr.io/amiller/groupauth-agent:v5 .
+docker push ghcr.io/amiller/groupauth-agent:v5
 ```
 
 ### Deploy to Phala Cloud
@@ -224,7 +224,7 @@ The GitHub runner registers via the existing ZK proof pipeline:
 
 | Component | Address | Network |
 |-----------|---------|---------|
-| GroupAuth | `0x0Af922925AE3602b0dC23c4cFCf54FABe2F54725` | Base mainnet |
+| GroupAuth | `0xdd29de730b99b876f21f3ab5dafba6711ff2c6ac` | Base mainnet |
 | SigstoreVerifier | `0x904Ae91989C4C96F2f51f1F8c9eF65C3730b3d8d` | Base mainnet |
 | HonkVerifier | `0xd317A58C478a18CA71BfC60Aab85538aB28b98ab` | Base mainnet |
 | Dstack KMS Root (sim) | `0x8f2cF602C9695b23130367ed78d8F557554de7C5` | — |
@@ -235,7 +235,7 @@ The GitHub runner registers via the existing ZK proof pipeline:
 
 ## Testing Checklist
 
-- [x] 21 forge unit tests pass
+- [x] 22 forge unit tests pass
 - [x] Integration: GitHub→GitHub (real ZK proof on Anvil)
 - [x] Integration: GitHub→Dstack (real Dstack simulator on Anvil)
 - [x] Integration: Dstack→GitHub (real Dstack simulator on Anvil)

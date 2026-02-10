@@ -184,7 +184,7 @@ No external binaries — uses `openssl` for RSA-OAEP encryption. See [docs/seale
 
 **GitHub runners and Dstack TEEs as equal peers in a shared group.** Different attestation systems — Sigstore (GitHub) and KMS signature chains (Dstack) — registering on the same contract and onboarding each other.
 
-**GroupAuth (Base mainnet):** [`0x0Af922925AE3602b0dC23c4cFCf54FABe2F54725`](https://basescan.org/address/0x0Af922925AE3602b0dC23c4cFCf54FABe2F54725)
+**GroupAuth (Base mainnet):** [`0xdd29de730b99b876f21f3ab5dafba6711ff2c6ac`](https://basescan.org/address/0xdd29de730b99b876f21f3ab5dafba6711ff2c6ac)
 
 ### What it demonstrates
 
@@ -234,21 +234,29 @@ inputs = ['0x'+raw[i:i+32].hex() for i in range(0,len(raw),32)]
 print('['+','.join(inputs)+']')
 ")
 
-# Generate a random identity key
+# Generate an identity keypair (secp256k1)
 PRIVKEY=$(cast wallet new | grep 'Private key' | awk '{print $3}')
-PUBKEY=0x04$(openssl rand -hex 64)
+COMPRESSED_PUBKEY=$(python3 -c "
+from eth_keys import keys
+pk = keys.PrivateKey(bytes.fromhex('${PRIVKEY#0x}'))
+print('0x' + pk.public_key.to_compressed_bytes().hex())
+")
 
-# Register on GroupAuth
-cast send 0x0Af922925AE3602b0dC23c4cFCf54FABe2F54725 \
-  "registerGitHub(bytes,bytes32[],bytes)" \
-  $PROOF "$INPUTS" $PUBKEY \
+# Sign keccak256(proof) for ownership proof
+PROOF_HASH=$(cast keccak $PROOF)
+OWNERSHIP_SIG=$(cast wallet sign --private-key $PRIVKEY $PROOF_HASH)
+
+# Register on GroupAuth (4 params: proof, inputs, compressedPubkey, ownershipSig)
+GA=0xdd29de730b99b876f21f3ab5dafba6711ff2c6ac
+cast send $GA \
+  "registerGitHub(bytes,bytes32[],bytes,bytes)" \
+  $PROOF "$INPUTS" $COMPRESSED_PUBKEY $OWNERSHIP_SIG \
   --rpc-url https://mainnet.base.org --private-key $PRIVKEY
 
-# Wait ~12s for TEE to onboard, then read the group secret
-MEMBER_ID=$(cast keccak $PUBKEY)
-cast call 0x0Af922925AE3602b0dC23c4cFCf54FABe2F54725 \
-  "getOnboarding(bytes32)" $MEMBER_ID \
-  --rpc-url https://mainnet.base.org
+# Wait ~12s for TEE to onboard, then read the ECIES-encrypted group secret
+MEMBER_ID=$(cast keccak $COMPRESSED_PUBKEY)
+cast call $GA "getOnboarding(bytes32)" $MEMBER_ID --rpc-url https://mainnet.base.org
+# Decrypt with: ecies.decrypt(privkey_bytes, ciphertext)
 ```
 
 ### How registration works
