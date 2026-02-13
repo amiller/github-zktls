@@ -172,10 +172,9 @@ jobs:
 
       - name: Generate ZK proof
         if: steps.meta.outputs.skip != 'true'
-        env:
-          PROVER_DIGEST: sha256:b13465c5bc36840dc80a4cbfdc8d98abd51ae2abfdaa0d48edc4da872146e5f0
-          EXPECTED_VK_HASH: "0x0d0b56f315c3dda7236c1d352fae8974871d3482125edea8a74139123d17d2fc"
         run: |
+          PROVER_DIGEST=$(python3 -c "import json; print(json.load(open('VERSIONS.json'))['reference']['prover_digest']['value'])")
+          EXPECTED_VK_HASH=$(python3 -c "import json; print(json.load(open('VERSIONS.json'))['requirements']['vk_hash']['value'])")
           REGISTRY="${{ vars.PROVER_REGISTRY || 'ghcr.io/amiller/zkproof' }}"
           echo "Using prover: ${REGISTRY}@${PROVER_DIGEST}"
           docker run --rm -e EXPECTED_VK_HASH="${EXPECTED_VK_HASH}" \

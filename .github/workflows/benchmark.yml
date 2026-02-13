@@ -16,14 +16,16 @@ permissions:
   attestations: write
   packages: read
 
-env:
-  PROVER_DIGEST: sha256:b13465c5bc36840dc80a4cbfdc8d98abd51ae2abfdaa0d48edc4da872146e5f0
-
 jobs:
   benchmark:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Read prover config
+        id: versions
+        run: |
+          echo "prover_digest=$(python3 -c "import json; print(json.load(open('VERSIONS.json'))['reference']['prover_digest']['value'])")" >> "$GITHUB_OUTPUT"
 
       - name: Generate test certificate
         run: |
@@ -54,6 +56,7 @@ jobs:
       - name: Run proof generation with timing
         run: |
           REGISTRY="${{ vars.PROVER_REGISTRY || 'ghcr.io/amiller/zkproof' }}"
+          PROVER_DIGEST="${{ steps.versions.outputs.prover_digest }}"
           IMAGE="${REGISTRY}@${PROVER_DIGEST}"
 
           echo "Pulling prover image..."

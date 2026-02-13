@@ -45,26 +45,20 @@ jobs:
           echo "vk_hash=$VK" >> "$GITHUB_OUTPUT"
           echo "VK hash: $VK"
 
-      - name: Update VERSIONS.json and workflows
+      - name: Update VERSIONS.json
         env:
           NEW_DIGEST: ${{ steps.push.outputs.digest }}
         run: |
-          OLD_DIGEST=$(grep -oP 'sha256:[a-f0-9]{64}' .github/workflows/github-identity.yml | head -1)
+          OLD_DIGEST=$(python3 -c "import json; print(json.load(open('VERSIONS.json'))['reference']['prover_digest']['value'])")
           echo "Old digest: $OLD_DIGEST"
           echo "New digest: $NEW_DIGEST"
           if [ "$OLD_DIGEST" = "$NEW_DIGEST" ]; then
             echo "Digest unchanged, skipping update"
             exit 0
           fi
-          # Update VERSIONS.json
           sed -i "s|$OLD_DIGEST|$NEW_DIGEST|" VERSIONS.json
-          # Update all consumer workflows
-          sed -i "s|$OLD_DIGEST|$NEW_DIGEST|" .github/workflows/github-identity.yml
-          sed -i "s|$OLD_DIGEST|$NEW_DIGEST|" .github/workflows/email-verify.yml
-          sed -i "s|$OLD_DIGEST|$NEW_DIGEST|" .github/workflows/benchmark.yml
-          echo "updated=true" >> "$GITHUB_OUTPUT"
 
-      - name: Commit updated digests
+      - name: Commit updated digest
         if: steps.push.outputs.digest != ''
         env:
           NEW_DIGEST: ${{ steps.push.outputs.digest }}
@@ -72,7 +66,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add VERSIONS.json .github/workflows/github-identity.yml .github/workflows/email-verify.yml .github/workflows/benchmark.yml
+          git add VERSIONS.json
           git diff --cached --quiet && echo "No changes to commit" && exit 0
           git commit -m "Update prover digest to ${NEW_DIGEST:0:23}...
 

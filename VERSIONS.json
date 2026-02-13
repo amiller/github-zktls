@@ -15,7 +15,7 @@
 
   "reference": {
     "prover_digest": {
-      "value": "sha256:b13465c5bc36840dc80a4cbfdc8d98abd51ae2abfdaa0d48edc4da872146e5f0",
+      "value": "sha256:d85e56318153c82b2a07c61ce580f3038072c5aa1a2e86a61795490e5ad9b6fc",
       "note": "Known-good Docker image. Produces the correct VK. You can also build your own prover or run outside Docker — only the VK matters."
     },
     "tooling": {
