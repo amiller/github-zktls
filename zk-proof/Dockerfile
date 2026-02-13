@@ -2,6 +2,7 @@
 # Usage: docker run --rm -v $(pwd):/work ghcr.io/amiller/zkproof generate /work/bundle.json /work/output
 
 FROM ubuntu:24.04
+LABEL org.opencontainers.image.source=https://github.com/amiller/github-zktls
 
 # Install dependencies
 RUN apt-get update && apt-get install -y \
