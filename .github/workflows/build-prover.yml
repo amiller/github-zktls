@@ -1,0 +1,90 @@
+name: Build Prover Image
+
+on:
+  push:
+    branches: [master]
+    paths: [zk-proof/**]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/zkproof
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build image
+        run: docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest zk-proof/
+
+      - name: Push image
+        id: push
+        run: |
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest | sed 's/.*@//')
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "Image digest: $DIGEST"
+
+      - name: Extract VK hash
+        id: vk
+        run: |
+          VK=$(docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest vk-hash)
+          echo "vk_hash=$VK" >> "$GITHUB_OUTPUT"
+          echo "VK hash: $VK"
+
+      - name: Update VERSIONS.json and workflows
+        env:
+          NEW_DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          OLD_DIGEST=$(grep -oP 'sha256:[a-f0-9]{64}' .github/workflows/github-identity.yml | head -1)
+          echo "Old digest: $OLD_DIGEST"
+          echo "New digest: $NEW_DIGEST"
+          if [ "$OLD_DIGEST" = "$NEW_DIGEST" ]; then
+            echo "Digest unchanged, skipping update"
+            exit 0
+          fi
+          # Update VERSIONS.json
+          sed -i "s|$OLD_DIGEST|$NEW_DIGEST|" VERSIONS.json
+          # Update all consumer workflows
+          sed -i "s|$OLD_DIGEST|$NEW_DIGEST|" .github/workflows/github-identity.yml
+          sed -i "s|$OLD_DIGEST|$NEW_DIGEST|" .github/workflows/email-verify.yml
+          sed -i "s|$OLD_DIGEST|$NEW_DIGEST|" .github/workflows/benchmark.yml
+          echo "updated=true" >> "$GITHUB_OUTPUT"
+
+      - name: Commit updated digests
+        if: steps.push.outputs.digest != ''
+        env:
+          NEW_DIGEST: ${{ steps.push.outputs.digest }}
+          VK_HASH: ${{ steps.vk.outputs.vk_hash }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add VERSIONS.json .github/workflows/github-identity.yml .github/workflows/email-verify.yml .github/workflows/benchmark.yml
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "Update prover digest to ${NEW_DIGEST:0:23}...
+
+          Built from $(git rev-parse --short HEAD). VK: $VK_HASH"
+          git push
+
+      - name: Summary
+        run: |
+          echo "## Prover Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| | |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Digest** | \`${{ steps.push.outputs.digest }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **VK Hash** | \`${{ steps.vk.outputs.vk_hash }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Source** | \`$(git rev-parse --short HEAD)\` |" >> $GITHUB_STEP_SUMMARY
