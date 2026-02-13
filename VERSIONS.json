@@ -7,8 +7,8 @@
       "note": "MUST match. Baked into the on-chain HonkVerifier. If your prover produces a different VK, proofs will fail with SumcheckFailed(). Any prover (Docker, local, custom) works as long as it produces this VK."
     },
     "required_commit": {
-      "value": "2ed50fd984c8c2419db1663af4d1ede341f2ca29",
-      "tag": "v1.0.2",
+      "value": "49f63544e3e4e0ac9cf5da9e11cdb69a0bf1e8e7",
+      "tag": "v1.0.3",
       "note": "MUST match. The faucet checks the commit SHA from the Sigstore attestation. Run the workflow from this tag, not from master."
     }
   },
