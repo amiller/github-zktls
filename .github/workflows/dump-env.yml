@@ -16,29 +16,68 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Environment confinement check
         run: |
           REF=".github/allowed-env-reference.txt"
-
-          # Strip comments and blank lines from reference
           grep -v '^#' "$REF" | grep -v '^$' | sort -u > /tmp/allowed.txt
-
-          # Current env var names
           env | cut -d= -f1 | sort -u > /tmp/current.txt
-
-          # Anything present that's not in the allowed list?
           UNEXPECTED=$(comm -23 /tmp/current.txt /tmp/allowed.txt || true)
-
           if [ -n "$UNEXPECTED" ]; then
             echo "::error::Unexpected environment variables detected!"
-            echo "The following vars are NOT in .github/allowed-env-reference.txt:"
             echo "$UNEXPECTED"
-            echo ""
-            echo "This could indicate env injection (LD_PRELOAD, NODE_OPTIONS, etc)."
-            echo "If these are legitimate, add them to allowed-env-reference.txt."
             exit 1
           fi
-
           echo "Environment confinement check passed."
           echo "$(wc -l < /tmp/current.txt) vars present, all in allowed list."
+
+  test-var-injection:
+    name: Test repo variable injection
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Check: do repo vars auto-inject into shell env?"
+        run: |
+          echo "=== Checking if repo variables leaked into process env ==="
+          echo ""
+          echo "PATH=$PATH"
+          echo "HOME=$HOME"
+          echo "ImageVersion=$ImageVersion"
+          echo ""
+          echo "=== Checking dangerous vars ==="
+          echo "LD_PRELOAD=${LD_PRELOAD:-<not set>}"
+          echo "NODE_OPTIONS=${NODE_OPTIONS:-<not set>}"
+          echo ""
+          echo "=== Full env, grepping for suspicious values ==="
+          env | grep -i "evil\|HACKED" || echo "(none found)"
+          echo ""
+          echo "=== All env var names ==="
+          env | cut -d= -f1 | sort
+
+      - name: "Check: are repo vars accessible via vars context?"
+        run: |
+          echo "=== vars.* context ==="
+          echo "vars.PATH=${{ vars.PATH }}"
+          echo "vars.HOME=${{ vars.HOME }}"
+          echo "vars.ImageVersion=${{ vars.ImageVersion }}"
+          echo "vars.LD_PRELOAD=${{ vars.LD_PRELOAD }}"
+          echo "vars.NODE_OPTIONS=${{ vars.NODE_OPTIONS }}"
+
+      - name: "Check: what if workflow env block uses vars.PATH?"
+        env:
+          INJECTED_PATH: ${{ vars.PATH }}
+          INJECTED_LD: ${{ vars.LD_PRELOAD }}
+        run: |
+          echo "=== Env block injection ==="
+          echo "INJECTED_PATH=$INJECTED_PATH"
+          echo "INJECTED_LD=$INJECTED_LD"
+          echo ""
+          echo "But actual PATH=$PATH"
+          echo "Actual LD_PRELOAD=${LD_PRELOAD:-<not set>}"
+
+      - name: "Check: what if env block directly overrides PATH?"
+        env:
+          PATH: ${{ vars.PATH }}
+        run: |
+          echo "=== Direct PATH override ==="
+          echo "PATH=$PATH"
+          echo "Can we run ls? ..."
+          ls / 2>&1 || echo "ls FAILED - PATH is broken"
