@@ -1,0 +1,12 @@
+name: Dump Runner Environment
+on: workflow_dispatch
+
+jobs:
+  dump-env:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Env var names (sorted)
+        run: env | cut -d= -f1 | sort
+
+      - name: Full env dump
+        run: env | sort
