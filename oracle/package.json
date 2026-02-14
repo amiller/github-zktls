@@ -1,0 +1,24 @@
+{
+  "name": "prediction-market-oracle",
+  "version": "1.0.0",
+  "description": "GitHub Actions-based oracle for prediction markets",
+  "main": "check-forum.js",
+  "scripts": {
+    "check": "node check-forum.js",
+    "verify": "./verify-attestation.sh",
+    "test": "node test-forum-scraper.js"
+  },
+  "keywords": [
+    "oracle",
+    "prediction-market",
+    "ethereum",
+    "github-actions",
+    "sigstore",
+    "attestation"
+  ],
+  "author": "clawTEEdah",
+  "license": "MIT",
+  "dependencies": {
+    "ethers": "^6.16.0"
+  }
+}

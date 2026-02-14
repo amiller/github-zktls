@@ -1,0 +1,17 @@
+{
+  "result": "FOUND",
+  "found": true,
+  "settleable": true,
+  "topic_id": "27685",
+  "topic_title": "New ERC: Facet-Based Diamonds",
+  "keyword": "security",
+  "oracle_type": "first",
+  "first_comment": {
+    "id": 67038,
+    "username": "radek",
+    "created_at": "2026-02-08T13:48:19.976Z",
+    "excerpt": "<p>For the multifunction facets such introspection is a great improvement for related tooling and initial deployment / configuration scripts. <a class=\"mention\" href=\"/u/mudgen\">@mudgen</a> <img src=\""
+  },
+  "timestamp": "2026-02-08T14:03:47.923Z",
+  "oracle_version": "1.2.0"
+}
