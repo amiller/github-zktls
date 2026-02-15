@@ -57,6 +57,21 @@ jobs:
             exit 1
           fi
 
+      - name: Check commit SHA
+        run: |
+          REQUIRED_TAG=$(python3 -c "import json; print(json.load(open('VERSIONS.json'))['requirements']['required_commit']['tag'])")
+          REQUIRED_SHA=$(python3 -c "import json; print(json.load(open('VERSIONS.json'))['requirements']['required_commit']['value'])")
+          CURRENT_SHA="${{ github.sha }}"
+          if [ "${CURRENT_SHA:0:40}" != "$REQUIRED_SHA" ]; then
+            echo "::error::Wrong commit. The faucet requires tag $REQUIRED_TAG (commit $REQUIRED_SHA)."
+            echo "::error::You ran from commit $CURRENT_SHA."
+            echo ""
+            echo "Fix: gh workflow run github-identity.yml --ref $REQUIRED_TAG -f recipient_address=YOUR_ADDRESS"
+            echo "Or in the GitHub UI: select '$REQUIRED_TAG' from the 'Use workflow from' dropdown."
+            exit 1
+          fi
+          echo "✓ Commit SHA matches required tag $REQUIRED_TAG"
+
       - name: Generate identity certificate
         run: |
           mkdir -p proof

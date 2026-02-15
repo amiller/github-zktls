@@ -87,6 +87,21 @@ jobs:
           echo "Submitting claim to faucet..."
           echo "Username: ${{ steps.parse.outputs.username }}"
 
+          # Decode a 4-byte error selector into a human-readable message
+          decode_error() {
+            local selector="$1"
+            case "$selector" in
+              832f97cb) echo "WrongCommit: proof was generated from the wrong git ref. Run the workflow from the required tag (see VERSIONS.json)." ;;
+              09bde339) echo "InvalidProof: ZK proof failed on-chain verification." ;;
+              ddf32b51) echo "CertificateMismatch: sha256(certificate) doesn't match the attested artifact hash." ;;
+              4dca8d92) echo "UsernameMismatch: username arg doesn't match what's in the certificate." ;;
+              c0ee95bb) echo "RecipientMismatch: recipient address doesn't match what's in the certificate." ;;
+              39b1a59e) echo "AlreadyClaimedToday: 24h cooldown not met. Try again tomorrow." ;;
+              c1336f85) echo "FaucetEmpty: no ETH left in faucet." ;;
+              *) echo "" ;;
+            esac
+          }
+
           set +e
           OUTPUT=$(cast send \
             ${{ steps.parse.outputs.faucet }} \
@@ -106,8 +121,16 @@ jobs:
           if [ $EXIT_CODE -ne 0 ]; then
             echo "Cast output:"
             echo "$OUTPUT"
-            # Extract revert reason if present
-            REASON=$(echo "$OUTPUT" | grep -oP 'Error\("\K[^"]+' || echo "$OUTPUT" | head -1)
+            # Try custom error selector first, then string error, then raw output
+            SELECTOR=$(echo "$OUTPUT" | grep -oP 'custom error 0x\K[a-f0-9]{8}' | head -1)
+            REASON=$(decode_error "$SELECTOR")
+            if [ -z "$REASON" ]; then
+              SELECTOR=$(echo "$OUTPUT" | grep -oP '0x\K[a-f0-9]{8}' | head -1)
+              REASON=$(decode_error "$SELECTOR")
+            fi
+            if [ -z "$REASON" ]; then
+              REASON=$(echo "$OUTPUT" | grep -oP 'Error\("\K[^"]+' || echo "$OUTPUT" | head -1)
+            fi
             echo "error_reason=$REASON" >> $GITHUB_OUTPUT
             echo "Transaction failed: $REASON"
             exit 1
@@ -118,8 +141,17 @@ jobs:
           echo "tx_hash=$TX_HASH" >> $GITHUB_OUTPUT
 
           if [ "$STATUS" = "0x0" ]; then
-            echo "error_reason=Transaction reverted on-chain (tx: $TX_HASH)" >> $GITHUB_OUTPUT
-            echo "Transaction reverted: $TX_HASH"
+            # Transaction reverted on-chain — trace to get error selector
+            REVERT_OUTPUT=$(cast run "$TX_HASH" --rpc-url https://sepolia.base.org 2>&1 || true)
+            SELECTOR=$(echo "$REVERT_OUTPUT" | grep -oP 'custom error 0x\K[a-f0-9]{8}' | head -1)
+            REASON=$(decode_error "$SELECTOR")
+            if [ -z "$REASON" ]; then
+              REASON="Transaction reverted on-chain (tx: $TX_HASH)"
+            else
+              REASON="$REASON (tx: $TX_HASH)"
+            fi
+            echo "error_reason=$REASON" >> $GITHUB_OUTPUT
+            echo "Transaction reverted: $REASON"
             exit 1
           fi
           echo "Transaction succeeded: $TX_HASH"

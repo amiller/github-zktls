@@ -18,10 +18,10 @@ Claim Base Sepolia testnet ETH by proving you have a GitHub account.
 
 1. **Fork this repo** — Click "Fork" at the top of this page
    - **Important:** Uncheck "Copy the master branch only" to include tags
-2. **Switch to the release tag** — In your fork, click the branch dropdown → "Tags" → select `v1.0.2`
+2. **Switch to the release tag** — In your fork, click the branch dropdown → "Tags" → select `v1.0.3`
 3. **Go to Actions** — Click the "Actions" tab
 4. **Run the workflow** — Click "GitHub Identity" → "Run workflow"
-   - **Important:** Select `v1.0.2` tag from the "Use workflow from" dropdown
+   - **Important:** Select `v1.0.3` tag from the "Use workflow from" dropdown
    - Enter your ETH address (see below if you need one)
    - Leave "Generate ZK proof" checked (default)
    - Click "Run workflow" — takes ~1 min
@@ -30,7 +30,7 @@ Claim Base Sepolia testnet ETH by proving you have a GitHub account.
    - **No gas?** [Open an issue](https://github.com/amiller/github-zktls/issues/new) titled `[CLAIM]` and paste the contents of `claim.json` in a ```json code block. We'll relay it for you.
    - **Have gas?** Submit directly with `cast send` (see below)
 
-> **Why the tag?** The faucet contract verifies the exact commit SHA that produced your proof. Running from `v1.0.2` ensures your proof matches the expected commit.
+> **Why the tag?** The faucet contract verifies the exact commit SHA that produced your proof. Running from `v1.0.3` ensures your proof matches the expected commit.
 
 ### Option B: Command Line
 
@@ -40,10 +40,10 @@ gh repo fork amiller/github-zktls --clone
 cd github-zktls
 
 # Switch to the release tag
-git checkout v1.0.2
+git checkout v1.0.3
 
 # Run the workflow from the tag (proof generated in Actions)
-gh workflow run github-identity.yml --ref v1.0.2 -f recipient_address=0xYOUR_ADDRESS
+gh workflow run github-identity.yml --ref v1.0.3 -f recipient_address=0xYOUR_ADDRESS
 
 # Wait for completion, then download
 gh run watch
@@ -271,7 +271,33 @@ ISigstoreVerifier.Attestation memory att = verifier.verifyAndDecode(proof, input
 
 ## For Agents
 
-**Trustless escrow between agents.** Post a bounty, get verifiable work, pay automatically.
+### Quick Start: Claim Testnet ETH
+
+```bash
+# One command — note the --ref flag is critical
+gh workflow run github-identity.yml --ref v1.0.3 \
+  -f recipient_address=0xYOUR_ADDRESS \
+  -f faucet_address=0x72cd70d28284dD215257f73e1C5aD8e28847215B
+
+# Wait, download, submit via issue relay (gasless)
+gh run watch && gh run download -n identity-proof
+gh issue create --title "[CLAIM]" --body '```json'"
+$(cat identity-proof/claim.json)"'
+```'
+```
+
+> **Common errors and fixes:**
+>
+> | Error | Cause | Fix |
+> |-------|-------|-----|
+> | `WrongCommit` | Workflow ran from wrong ref | Add `--ref v1.0.3` |
+> | `AlreadyClaimedToday` | 24h cooldown per username | Wait and retry tomorrow |
+> | `FaucetEmpty` | No ETH left | Deposit to `0x72cd70d...` |
+> | `CertificateMismatch` | Certificate bytes were modified | Use `claim.json` as-is from the artifact |
+
+### Trustless Escrow
+
+**Post a bounty, get verifiable work, pay automatically.**
 
 The pattern: One agent posts a bounty with a prompt. Another agent forks the repo, does the work, runs a self-judging workflow where Claude evaluates the diff, and claims the bounty with a ZK proof.
 
